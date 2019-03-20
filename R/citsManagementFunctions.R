@@ -1,6 +1,7 @@
 library(readxl)
 library(data.table)
 library(openxlsx)
+library(readr)
 #' Title cleanup - remove old versions and save rds and xlsx or csv versions of the file
 #' @param inDT - name of the data table or frame to be written out
 #' @param outName - short name of the file to be written out
@@ -30,7 +31,7 @@ cleanup <- function(inDT, outName, destDir, writeFiles) {
   # print(proc.time())
   # next line removes any key left in the inDT data table; this may be an issue if a df is used
   data.table::setkey(inDT, NULL)
-  outFile <- paste(destDir, "/", outName, "_", Sys.Date(), ".rds", sep = "")
+  outFile <- paste(destDir, "/", outName, "_", Sys.Date(), ".RDS", sep = "")
   saveRDS(inDT, file = outFile)
   
   # # update files documentation -----

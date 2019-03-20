@@ -1,0 +1,1 @@
+The Results folder contains files that have been produced by the WoSReadIn script. At some point it will also have outputs from a similar script for Scopus results.

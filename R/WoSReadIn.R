@@ -1,9 +1,11 @@
 source("R/citsManagementFunctions.R")
 
 # get input data file name and location
-infileName <- "data-raw/cc_livestock_03_19_2019.txt"
+#infileName <- "data-raw/cc_livestock_03_19_2019.txt"
+infileName <- "data-raw/WoSFoodLossWaste_03_20_2019.txt"
+
 # outputFileContent is combined with "WoS to create the output file names
-outFileContent <- "livestock"
+outFileContent <- "foodLossWaste"
 
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
@@ -17,6 +19,8 @@ searchStrings.regions <- c("Latin America", "Central America", "Caribbean",
                            "Europe", "Northern Europe", "Western Europe", "Southern Europe", "Eastern Europe", "Western Asia", "Middle East",
                            "Asia", "South Asia", "East Asia", "Central Asia", "Australia", "New Zealand",
                            "Southeast Asia") # entries in the added region column
+searchStrings.species <- c("ruminant", "cattle", "goat", "sheep", "pig", "swine", "chicken", "poultry")
+searchStrings.climateChange <- c("impact*", "adapt*", "mitigat*")
 
 # read in Wos mac tab delimited file
 # get WoS variable names
@@ -44,6 +48,8 @@ referenceList.wos[, RCP := "None"]
 referenceList.wos[, SSP := "None"]
 referenceList.wos[, region := "None"]
 referenceList.wos[, country := "None"]
+referenceList.wos[, species := "None"]
+referenceList.wos[, climate_change := "None"]
 referenceList.wos[, keepRef := "No"]
 
 setkey(referenceList.wos)
@@ -66,11 +72,22 @@ for (i in searchStrings.countries) {
   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
   referenceList.wos[i1, country := paste(country,i, sep = ", ")]
 }
+
+for (i in searchStrings.species) {
+  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+  referenceList.wos[i1, species := paste(species,i, sep = ", ")]
+}
+for (i in searchStrings.climateChange) {
+  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+  referenceList.wos[i1, climate_change := paste(climate_change,i, sep = ", ")]
+}
 # remove first "none, "
 referenceList.wos[, RCP := gsub("None, ", "", RCP)]
 referenceList.wos[, SSP := gsub("None, ", "", SSP)]
 referenceList.wos[, region := gsub("None, ", "", region)]
 referenceList.wos[, country := gsub("None, ", "", country)]
+referenceList.wos[, species := gsub("None, ", "", species)]
+referenceList.wos[, climate_change := gsub("None, ", "", climate_change)]
 
 inDT <- referenceList.wos
 outName <- paste("WOS", outFileContent, sep = "_")
