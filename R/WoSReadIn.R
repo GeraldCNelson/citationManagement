@@ -6,6 +6,7 @@ infileName <- "data-raw/WoSFoodLossWaste_03_20_2019.txt"
 
 # outputFileContent is combined with "WoS to create the output file names
 outFileContent <- "foodLossWaste"
+#outFileContent <- "livestock"
 
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
@@ -13,14 +14,22 @@ searchStrings.countries <- regions_lookup$country_name.ISO
 
 # other search strings
 searchCols <- c("title", "abstract", "author.keywords") # what variables in the reference list should be searched for
-searchStrings.RCP <- c("RCP",  "RCP4.5", "RCP8.5", "CMIP", "SRES") # entries in the added RCP column
+searchStrings.RCP <- c("RCP", "RCP2.6", "RCP6.0", "RCP4.5", "RCP8.5", "CMIP", "SRES") # entries in the added RCP column
 searchStrings.SSP <- c("SSP",  "SSP1", "SSP2", "SSP3", "SSP4","SSP5") # entries in the added SSP column
 searchStrings.regions <- c("Latin America", "Central America", "Caribbean", 
                            "Europe", "Northern Europe", "Western Europe", "Southern Europe", "Eastern Europe", "Western Asia", "Middle East",
                            "Asia", "South Asia", "East Asia", "Central Asia", "Australia", "New Zealand",
-                           "Southeast Asia") # entries in the added region column
-searchStrings.species <- c("ruminant", "cattle", "goat", "sheep", "pig", "swine", "chicken", "poultry")
+                           "Southeast Asia") 
 searchStrings.climateChange <- c("impact*", "adapt*", "mitigat*")
+searchStrings.animals <- c("ruminant", "cattle", "beef", "goat", "sheep", "pig", "swine", 
+                           "pork", "chicken", "poultry")
+searchStrings.crops <- c("rice", "maize", "corn", "wheat", "sorghum", "millet", "cassava", "yam", "potato", "veget*", "frui*")
+searchStrings.foodSec <- c("food security", "food insecure*",  "food access*",  
+                           "food sufficien*", "food insufficien*","food stability")
+
+searchStrings <- c("searchStrings.RCP", "searchStrings.SSP", "searchStrings.regions", "searchStrings.countries", 
+                   "searchStrings.climateChange", "searchStrings.animals", "searchStrings.crops", "searchStrings.foodSec")
+searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 
 # read in Wos mac tab delimited file
 # get WoS variable names
@@ -44,50 +53,74 @@ referenceList.wos[, setdiff(names(referenceList.wos), c(keepListCol.content.newN
 # fix publication type names
 referenceList.wos <- referenceList.wos[pubType %in% "J", pubType := "journal"][pubType %in% "B", pubType := "book"][pubType %in% "S", pubType := "series"]
 
-referenceList.wos[, RCP := "None"]
-referenceList.wos[, SSP := "None"]
-referenceList.wos[, region := "None"]
-referenceList.wos[, country := "None"]
-referenceList.wos[, species := "None"]
-referenceList.wos[, climate_change := "None"]
+for (i in searchStrings.names) {
+  referenceList.wos[, (i) := "None"]
+}
+
+# new columns with no search strings
+colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system", "study_type", "study_period", "methodology", 
+                             "adapt_strat", "resid_damage", "comments")
+for (i in colsWithNoSearchStrings) {
+  referenceList.wos[, (i) := "None"]
+}
 referenceList.wos[, keepRef := "No"]
 
 setkey(referenceList.wos)
-for (i in searchStrings.RCP) {
-  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-  referenceList.wos[i1, RCP := paste(RCP,i, sep = ", ")]
+
+for (i in 1:length(searchStrings)) {
+  searchSt <- eval( parse(text = searchStrings[i]))
+  for (j in searchSt) {
+    i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(j, x))), .SDcols = searchCols]
+    referenceList.wos[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]),j, sep = ", ")]
+  }
 }
 
-for (i in searchStrings.SSP) {
-  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-  referenceList.wos[i1, SSP := paste(SSP,i, sep = ", ")]
-}
-
-for (i in searchStrings.regions) {
-  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-  referenceList.wos[i1, region := paste(region,i, sep = ", ")]
-}
-
-for (i in searchStrings.countries) {
-  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-  referenceList.wos[i1, country := paste(country,i, sep = ", ")]
-}
-
-for (i in searchStrings.species) {
-  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-  referenceList.wos[i1, species := paste(species,i, sep = ", ")]
-}
-for (i in searchStrings.climateChange) {
-  i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-  referenceList.wos[i1, climate_change := paste(climate_change,i, sep = ", ")]
-}
+# for (i in searchStrings.RCP) {
+#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+#   referenceList.wos[i1, RCP := paste(RCP,i, sep = ", ")]
+# }
+# 
+# for (i in searchStrings.SSP) {
+#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+#   referenceList.wos[i1, SSP := paste(SSP,i, sep = ", ")]
+# }
+# 
+# for (i in searchStrings.regions) {
+#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+#   referenceList.wos[i1, region := paste(region,i, sep = ", ")]
+# }
+# 
+# for (i in searchStrings.countries) {
+#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+#   referenceList.wos[i1, country := paste(country,i, sep = ", ")]
+# }
+# 
+# for (i in searchStrings.species) {
+#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+#   referenceList.wos[i1, species := paste(species,i, sep = ", ")]
+# }
+# for (i in searchStrings.climateChange) {
+#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
+#   referenceList.wos[i1, climate_change := paste(climate_change,i, sep = ", ")]
+# }
 # remove first "none, "
-referenceList.wos[, RCP := gsub("None, ", "", RCP)]
-referenceList.wos[, SSP := gsub("None, ", "", SSP)]
-referenceList.wos[, region := gsub("None, ", "", region)]
-referenceList.wos[, country := gsub("None, ", "", country)]
-referenceList.wos[, species := gsub("None, ", "", species)]
-referenceList.wos[, climate_change := gsub("None, ", "", climate_change)]
+
+for (i in searchStrings.names){
+  referenceList.wos[, (i) := gsub(paste0("None, "), "", get(i))]
+}
+for (i in searchStrings.names){
+  referenceList.wos[, (i) := gsub(paste0(i, ", "), "", get(i))]
+}
+# construct metadata variable
+DT <- data.table(
+  searchStringName = character(),
+  search_strings = character()
+)
+
+for (i in 1:length(searchStrings)) {
+  newRow <- list(searchStrings.names[i], paste(get(searchStrings[i]), collapse = ", "))
+  DT <- rbind(DT, newRow)
+}
 
 inDT <- referenceList.wos
 outName <- paste("WOS", outFileContent, sep = "_")

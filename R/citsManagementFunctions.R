@@ -83,6 +83,14 @@ cleanup <- function(inDT, outName, destDir, writeFiles) {
       gridExpand = TRUE )
     
     
+    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Metadata")
+    openxlsx::writeDataTable(
+      wbGeneral,
+      DT,  sheet = "Metadata", startRow = 1, startCol = 1, rowNames = FALSE,
+      colNames = TRUE, withFilter = TRUE)
+    openxlsx::setColWidths(
+      wbGeneral, sheet = "Metadata", cols = 1:2 , widths = c(20,70))
+    
     xcelOutFileName = paste(destDir, "/", longName, "_", Sys.Date(), ".xlsx", sep = "") # added longName functionality June 20, 2018
     openxlsx::saveWorkbook(wbGeneral, xcelOutFileName, overwrite = TRUE)
     #   cat("\nDone writing the xlsx for ", outName, sep = "")
