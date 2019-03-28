@@ -2,6 +2,30 @@ library(readxl)
 library(data.table)
 library(openxlsx)
 library(readr)
+library(stringr)
+
+# get country names
+regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
+searchStrings.countries <- regions_lookup$country_name.ISO
+# other search strings
+searchStrings.RCP <- c("RCP", "RCP2.6", "RCP6.0", "RCP4.5", "RCP8.5", "CMIP", "SRES") # entries in the added RCP column
+searchStrings.SSP <- c("SSP",  "SSP1", "SSP2", "SSP3", "SSP4","SSP5") # entries in the added SSP column
+searchStrings.regions <- c("Latin America", "Central America", "Caribbean", 
+                           "Europe", "Northern Europe", "Western Europe", "Southern Europe", "Eastern Europe", "Western Asia", "Middle East",
+                           "Asia", "South Asia", "East Asia", "Central Asia", "Australia", "New Zealand",
+                           "Southeast Asia") 
+searchStrings.climateChange <- c("impact*", "adapt*", "mitigat*")
+searchStrings.animals <- c("ruminant", "cattle", "beef", "goat", "sheep", "pig", "swine", 
+                           "pork", "chicken", "poultry")
+searchStrings.crops <- c("rice", "maize", "corn", "wheat", "sorghum", "millet", "cassava", "yam", "potato", "veget*", "frui*")
+searchStrings.foodSec <- c("food security", "food insecure*",  "food access*",  
+                           "food sufficien*", "food insufficien*","food stability")
+searchStrings.notPeerRev <- c("Conference Proceeding", "Letter", "Review", "Correction", "Editorial Material")
+
+searchStrings <- c("searchStrings.RCP", "searchStrings.SSP", "searchStrings.regions", "searchStrings.countries", 
+                   "searchStrings.climateChange", "searchStrings.animals", "searchStrings.crops", "searchStrings.foodSec", "searchStrings.notPeerRev")
+searchStrings.names <- gsub("searchStrings.", "", searchStrings)
+
 #' Title cleanup - remove old versions and save rds and xlsx or csv versions of the file
 #' @param inDT - name of the data table or frame to be written out
 #' @param outName - short name of the file to be written out
@@ -88,6 +112,8 @@ cleanup <- function(inDT, outName, destDir, writeFiles) {
       wbGeneral,
       DT,  sheet = "Metadata", startRow = 1, startCol = 1, rowNames = FALSE,
       colNames = TRUE, withFilter = TRUE)
+    
+
     openxlsx::setColWidths(
       wbGeneral, sheet = "Metadata", cols = 1:2 , widths = c(20,70))
     
