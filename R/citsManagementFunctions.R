@@ -7,23 +7,28 @@ library(stringr)
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
 searchStrings.countries <- regions_lookup$country_name.ISO
+searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
 # other search strings
 searchStrings.RCP <- c("RCP", "RCP2.6", "RCP6.0", "RCP4.5", "RCP8.5", "CMIP", "SRES") # entries in the added RCP column
 searchStrings.SSP <- c("SSP",  "SSP1", "SSP2", "SSP3", "SSP4","SSP5") # entries in the added SSP column
 searchStrings.regions <- c("Latin America", "Central America", "Caribbean", 
                            "Europe", "Northern Europe", "Western Europe", "Southern Europe", "Eastern Europe", "Western Asia", "Middle East",
                            "Asia", "South Asia", "East Asia", "Central Asia", "Australia", "New Zealand",
-                           "Southeast Asia") 
+                           "Southeast Asia", "Africa", "East Africa", "West Africa", "Central Africa", "North Africa") 
 searchStrings.climateChange <- c("impact*", "adapt*", "mitigat*")
 searchStrings.animals <- c("ruminant", "cattle", "beef", "goat", "sheep", "pig", "swine", 
                            "pork", "chicken", "poultry")
-searchStrings.crops <- c("rice", "maize", "corn", "wheat", "sorghum", "millet", "cassava", "yam", "potato", "veget*", "frui*")
+searchStrings.crops <- c("rice", "maize", "corn", "wheat", "sorghum", "millet", "cassava", "yam", "potato", "veget*", 
+                         "frui*", "tomato*", "strawberr*", "blueberr*", "raspberr*", "grap*", "coffee", "cocoa", "tea")
 searchStrings.foodSec <- c("food security", "food insecure*",  "food access*",  
                            "food sufficien*", "food insufficien*","food stability")
 searchStrings.notPeerRev <- c("Conference Proceeding", "Letter", "Review", "Correction", "Editorial Material")
+searchStrings.timePeriod <- c("*century", "mid century", "end century", "2030", "2025", "2050", "2080", "2100")
+searchStrings.econ <- c("profit*", "finance*", "economic*") 
+  
 
 searchStrings <- c("searchStrings.RCP", "searchStrings.SSP", "searchStrings.regions", "searchStrings.countries", 
-                   "searchStrings.climateChange", "searchStrings.animals", "searchStrings.crops", "searchStrings.foodSec", "searchStrings.notPeerRev")
+                   "searchStrings.climateChange", "searchStrings.animals", "searchStrings.crops", "searchStrings.foodSec","searchStrings.timePeriod", "searchStrings.econ", "searchStrings.notPeerRev")
 searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 
 #' Title cleanup - remove old versions and save rds and xlsx or csv versions of the file

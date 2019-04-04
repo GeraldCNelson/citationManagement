@@ -8,14 +8,16 @@ infileName <- "data-raw/cc_livestock_03_19_2019.txt"
 # infileName <- "data-raw/WOSfoodPrices03_25_2019.txt"
 # infileName <- "data-raw/WOSbioenergyFood_03_20_2019.txt"
 
+infileName <- "data-raw/WOS_financialization_03_31_2019.txt"
+
 # outputFileContent is combined with "WoS to create the output file names
 # outFileContent <- "foodLossWaste"
 outFileContent <- "livestock"
 #outFileContent <- "bioenergyFood"
 # outFileContent <- "adaptTrade"
 # outFileContent <- "foodPrices"
-
-query <- 
+outFileContent <- "financialization"
+query <- 'TOPIC: ("climate change" AND financiali*). Timespan: 2014-2019. Indexes: SCI-EXPANDED, SSCI, A&HCI, CPCI-S, CPCI-SSH, BKCI-S, BKCI-SSH, ESCI, CCR-EXPANDED, IC.'
 
 searchCols <- c("title", "abstract", "author_keywords", "document_type") # what variables in the reference list should be searched for
 
@@ -64,36 +66,6 @@ for (i in 1:length(searchStrings)) {
   }
 }
 
-# for (i in searchStrings.RCP) {
-#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-#   referenceList.wos[i1, RCP := paste(RCP,i, sep = ", ")]
-# }
-# 
-# for (i in searchStrings.SSP) {
-#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-#   referenceList.wos[i1, SSP := paste(SSP,i, sep = ", ")]
-# }
-# 
-# for (i in searchStrings.regions) {
-#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-#   referenceList.wos[i1, region := paste(region,i, sep = ", ")]
-# }
-# 
-# for (i in searchStrings.countries) {
-#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-#   referenceList.wos[i1, country := paste(country,i, sep = ", ")]
-# }
-# 
-# for (i in searchStrings.animals) {
-#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-#   referenceList.wos[i1, animals := paste(animals,i, sep = ", ")]
-# }
-# for (i in searchStrings.climateChange) {
-#   i1 <- referenceList.wos[, Reduce("|", lapply(.SD, function(x) grepl(i, x))), .SDcols = searchCols]
-#   referenceList.wos[i1, climate_change := paste(climate_change,i, sep = ", ")]
-# }
-# remove first "none, "
-
 for (i in searchStrings.names){
   referenceList.wos[, (i) := gsub(paste0("None, "), "", get(i))]
 }
@@ -103,17 +75,24 @@ for (i in searchStrings.names){
 for (i in searchStrings.names){
   referenceList.wos[, (i) := gsub(paste0(i, ", "), "", get(i))]
 }
+
+# prepare Excel file data
+
 # construct metadata variable
 DT <- data.table(
-  searchStringName = character(),
-  search_strings = character()
+  variable_name = character(),
+  variable_value = character()
 )
 
-Metadata.querystring <- c("query", query)
-metadata.datestring <- (c("date queried", Sys.Date()))
+metadata.querystring <- list("query", query)
+metadata.datestring <- list("date queried", as.character(Sys.Date()))
+metadata.recordCount <- list("reference count", total_results)
+metadata.searchStringLabel <- list("search string names", "search string content")
 
-DT <- rbind(DT, Metadata.querystring)
+DT <- rbind(DT, metadata.querystring)
 DT <- rbind(DT, metadata.datestring)
+DT <- rbind(DT, metadata.recordCount)
+DT <- rbind(DT, metadata.searchStringLabel)
 
 for (i in 1:length(searchStrings)) {
   newRow <- list(searchStrings.names[i], paste(get(searchStrings[i]), collapse = ", "))

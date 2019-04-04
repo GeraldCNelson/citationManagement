@@ -1,17 +1,34 @@
 library("rscopus")
 source("R/citsManagementFunctions.R")
 
-get_api_key()
-# have_api_key()
+#get_api_key(api_key = Sys.getenv('Elsevier_API'))
+ if (!have_api_key()) stop("Missing api key")
 
 #query <- 'TITLE-ABS-KEY("climate change" AND food*)  AND PUBYEAR > 2013'
 query <- 'TITLE-ABS-KEY("climate change" AND food or food+*secur* or food+access or food+afford* or food+insecure* or
                       food+insufficien* or food+choice* or food+choice* or food+choice* or food+choice* or food+choice* or
 food+availabili* or food+intake* or food+utilization* or food+stability* or food+quality* or food+poverty*) AND  PUBYEAR > 2013'
 
-# query <- 'TITLE-ABS-KEY("climate change" AND livestock*)  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY(land AND ocean AND climate AND change) AND (conflict OR adaptation OR use OR mitigation) AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change" AND livestock*)  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change" AND "food value chain")  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change" AND food+system*)  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change" AND financialization AND agriculture)  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change" AND storage+loss* AND (crop OR livestock or fish))  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change" AND genet*) AND (crop OR livestock or fish)  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change" AND impact*) AND (crop OR livestock or fish)  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY(climate+change AND impact* AND frui* OR tomato* OR strawberr* OR blueberr* OR raspberr* OR grap*)  AND PUBYEAR > 2013'
 outFileContent <- "food"
-#outFileContent <- "livestock"
+outFileContent <- "livestock"
+outFileContent <- "valueChain"
+outFileContent <- "foodSystem"
+outFileContent <- "oceans"
+outFileContent <- "financialization"
+outFileContent <- "storageLoss"
+outFileContent <- "geneticEng"
+outFileContent <- "impacts"
+outFileContent <- "fruitImpact"
+
 
 keepListCol.content <- c("dc:title","dc:creator","prism:publicationName", # removed "prism:url","dc:identifier","eid",
                          "prism:eIssn","prism:volume","prism:issueIdentifier","prism:coverDate", "prism:pageRange",
@@ -22,7 +39,7 @@ keepListCol.content.newNames <- c("title","firstAuthor","publicationName", # rem
                                   "doi","abstract","citations","pubType",
                                   "document_type", "author_keywords")
 
-keepListCol.author <- c("authorid", "authname", "surname")
+keepListCol.author <- c("@seq", "authname", "entry_number")
 
 searchCols <- c("title", "abstract", "author_keywords", "document_type") # what variables in the reference list should be searched for
 
@@ -38,6 +55,13 @@ dt.content[, setdiff(names(dt.content), keepListCol.content) := NULL]
 setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames)
 dt.authorInfo <- as.data.table(df$author)
 dt.authorInfo[, setdiff(names(dt.authorInfo), keepListCol.author) := NULL]
+
+authsList <- data.table(authrs = character())
+for (i in unique(dt.authorInfo$entry_number)) {
+  temp <-dt.authorInfo[entry_number == i, authname]
+  temp <- as.list(paste(temp, collapse = ", "))
+  authsList <- rbind(authsList, temp)
+}
 temp.content <- unique(dt.content)
 temp.author <- unique(dt.authorInfo)
 
@@ -74,6 +98,7 @@ for (i in searchStrings.names){
   temp.content[, (i) := gsub(paste0(i, ", "), "", get(i))]
 }
 temp.content[, author_keywords := str_replace_all(author_keywords, "\\|, ", "")]
+temp.content[, author_keywords := str_replace_all(author_keywords, "\\|", ",")]
 
 # construct metadata variable
 DT <- data.table(
