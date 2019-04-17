@@ -18,6 +18,9 @@ query <- 'TITLE-ABS-KEY("climate change" AND storage+loss* AND (crop OR livestoc
 query <- 'TITLE-ABS-KEY("climate change" AND genet*) AND (crop OR livestock or fish)  AND PUBYEAR > 2013'
 query <- 'TITLE-ABS-KEY("climate change" AND impact*) AND (crop OR livestock or fish)  AND PUBYEAR > 2013'
 query <- 'TITLE-ABS-KEY(climate+change AND impact* AND frui* OR tomato* OR strawberr* OR blueberr* OR raspberr* OR grap*)  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY(free+air+carbon+dioxide+experiment* )  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY(free+air+ozone+experiment* )  AND PUBYEAR > 2013'
+query <- 'TITLE-ABS-KEY("climate change") AND AUTHLASTNAME("Valin" or "Havlik" or "Pope" or "van Meijl" or "Sands")  AND PUBYEAR > 2013'
 outFileContent <- "food"
 outFileContent <- "livestock"
 outFileContent <- "valueChain"
@@ -28,6 +31,9 @@ outFileContent <- "storageLoss"
 outFileContent <- "geneticEng"
 outFileContent <- "impacts"
 outFileContent <- "fruitImpact"
+outFileContent <- "FACEexperiments"
+outFileContent <- "FACEozone"
+outFileContent <- "IIASAPIKetcPubs"
 
 
 keepListCol.content <- c("dc:title","dc:creator","prism:publicationName", # removed "prism:url","dc:identifier","eid",
