@@ -3,6 +3,11 @@ library(data.table)
 library(openxlsx)
 library(readr)
 library(stringr)
+library(rscopus)
+library(httr)
+library(jsonlite)
+library(stringr)
+library(doi2bib) #install with install.packages("remotes"); remotes::install_github("wkmor1/doi2bib")
 
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
@@ -16,19 +21,25 @@ searchStrings.regions <- c("Latin America", "Central America", "Caribbean",
                            "Asia", "South Asia", "East Asia", "Central Asia", "Australia", "New Zealand",
                            "Southeast Asia", "Africa", "East Africa", "West Africa", "Central Africa", "North Africa") 
 searchStrings.climateChange <- c("impact*", "adapt*", "mitigat*")
-searchStrings.animals <- c("ruminant", "cattle", "beef", "goat", "sheep", "pig", "swine", 
+searchStrings.animals <- c("ruminnt", "cattle", "beef", "goat", "sheep", "pig", "swine", 
                            "pork", "chicken", "poultry")
-searchStrings.crops <- c("rice", "maize", "corn", "wheat", "sorghum", "millet", "cassava", "yam", "potato", "veget*", 
-                         "frui*", "tomato*", "strawberr*", "blueberr*", "raspberr*", "grap*", "coffee", "cocoa", "tea")
+searchStrings.cereals <- c("cereal*", "rice", "maize", "corn", "wheat", "sorghum", "millet")
+searchStrings.fruits <- c("frui*", "tomato*", "strawberr*", "blueberr*", "raspberr*", "grap*")
+searchStrings.vegetables <- c("veget*", "caulif*", "tomato*")
+searchStrings.roots <- c("cassava", "yam", "potato", "sweet+potato")
+searchStrings.stimulants <- c("coffee", "cocoa", "tea")
+searchStrings.fish <- c("fish", "seafood", "molluscs", "salmon", "tuna", "hake")
 searchStrings.foodSec <- c("food security", "food insecure*",  "food access*",  
                            "food sufficien*", "food insufficien*","food stability")
 searchStrings.notPeerRev <- c("Conference Proceeding", "Letter", "Review", "Correction", "Editorial Material")
 searchStrings.timePeriod <- c("*century", "mid century", "end century", "2030", "2025", "2050", "2080", "2100")
-searchStrings.econ <- c("profit*", "finance*", "economic*") 
-  
-
+searchStrings.econ <- c("profit*", "finance*", "economic*", "price", "price+variability") 
 searchStrings <- c("searchStrings.RCP", "searchStrings.SSP", "searchStrings.regions", "searchStrings.countries", 
-                   "searchStrings.climateChange", "searchStrings.animals", "searchStrings.crops", "searchStrings.foodSec","searchStrings.timePeriod", "searchStrings.econ", "searchStrings.notPeerRev")
+                   "searchStrings.climateChange", "searchStrings.foodSec",
+                   "searchStrings.animals", "searchStrings.cereals", "searchStrings.fruits", "searchStrings.vegetables", "searchStrings.roots",
+                   "searchStrings.stimulants", "searchStrings.fish",
+                   "searchStrings.timePeriod", 
+                   "searchStrings.econ", "searchStrings.notPeerRev")
 searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 
 #' Title cleanup - remove old versions and save rds and xlsx or csv versions of the file
@@ -37,17 +48,17 @@ searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 #' @param destDir - directory where the cleanup takes place
 #' @param writeFiles - format to use for writing output in addition to RDS
 #' @desc brief description of the contents of the file
-cleanup <- function(inDT, outName, destDir, writeFiles) {
- # sourceFile <- get("sourceFile", envir = .GlobalEnv)
+cleanup <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, writeFiles) {
+  # sourceFile <- get("sourceFile", envir = .GlobalEnv)
   if (missing(writeFiles)) {writeFiles = "xlsx"}
- # if (missing(destDir)) {destDir = fileloc("mData")}
+  # if (missing(destDir)) {destDir = fileloc("mData")}
   
-#  colNames <- paste(colnames(inDT), collapse = ", ")
-#  outInfo <- list(outName, sourceFile, destDir, desc, colNames)
-#  metadataDT <<- rbind(metadataDT, outInfo)
+  #  colNames <- paste(colnames(inDT), collapse = ", ")
+  #  outInfo <- list(outName, sourceFile, destDir, desc, colNames)
+  #  metadataDT <<- rbind(metadataDT, outInfo)
   #  cat("\n", "Outfilename: ", outName, " Destination: ", Destination," Script: ", sourceFile," Desc: ", desc," Col. names: ", colNames, "\n")
   #convert to a standard order
- # oldOrder <- names(inDT)
+  # oldOrder <- names(inDT)
   # startOrder <- c("scenario",keyVariable("region"),"year")
   # if (all(startOrder %in% oldOrder)) {
   #   remainder <- oldOrder[!oldOrder %in% startOrder]
@@ -59,9 +70,9 @@ cleanup <- function(inDT, outName, destDir, writeFiles) {
   sprintf("\nWriting the rds for %s to %s ", outName, destDir)
   # print(proc.time())
   # next line removes any key left in the inDT data table; this may be an issue if a df is used
-  data.table::setkey(inDT, NULL)
+  data.table::setkey(outName, NULL)
   outFile <- paste(destDir, "/", outName, "_", Sys.Date(), ".RDS", sep = "")
-  saveRDS(inDT, file = outFile)
+  #saveRDS(inDT, file = outFile)
   
   # # update files documentation -----
   # Note: fileDocumentation.csv is currently not being used.
@@ -73,15 +84,19 @@ cleanup <- function(inDT, outName, destDir, writeFiles) {
   # write.csv(fileDoc, paste(fileloc("mData"), "fileDocumentation.csv", sep = "/"), row.names = FALSE)
   #
   # #print(proc.time())
-  if (missing(writeFiles)) {writeFiles = "xlsx"}
-  if (nrow(inDT) > 75000) {
-    sprintf("\nThe number of rows in the data, %s, is greater than 50,000. Not writing xlsx or csv", nrow(inDT))
+  if (nrow(inDT.scopus) > 75000) {
+    sprintf("\nThe number of rows in the SCOPUS data set, %s, is greater than 50,000. Not writing xlsx or csv", nrow(inDT.scopus))
     writeFiles <- writeFiles[!writeFiles %in% c("xlsx")]
   }
-  if ("csv"  %in% writeFiles) {
-    sprintf("\nWriting the csv for %s to %s ", outName, destDir)
-    write.csv(inDT,file = paste(destDir, "/", outName, "_", Sys.Date(), ".csv", sep = ""), row.names = FALSE)
+  
+  if (nrow(inDT.wok) > 75000) {
+    sprintf("\nThe number of rows in the WOK data set, %s, is greater than 50,000. Not writing xlsx or csv", nrow(inDT.wok))
+    writeFiles <- writeFiles[!writeFiles %in% c("xlsx")]
   }
+  # if ("csv"  %in% writeFiles) {
+  #   sprintf("\nWriting the csv for %s to %s ", outName, destDir)
+  #   write.csv(inDT,file = paste(destDir, "/", outName, "_", Sys.Date(), ".csv", sep = ""), row.names = FALSE)
+  # }
   if ("xlsx"  %in% writeFiles) {
     #    cat("\nwriting the xlsx for ", outName, " to ", dir, sep = ""))
     numStyle <- openxlsx::createStyle(numFmt = "0.000")
@@ -90,37 +105,56 @@ cleanup <- function(inDT, outName, destDir, writeFiles) {
     wbGeneral <- openxlsx::createWorkbook()
     longName <- outName
     outName <- strtrim(outName, c(31))
-    openxlsx::addWorksheet(wb = wbGeneral, sheetName = outName)
-    
-    openxlsx::writeDataTable(
-      wbGeneral,
-      inDT,  sheet = outName, startRow = 1, startCol = 1, rowNames = FALSE,
-      colNames = TRUE, withFilter = TRUE)
-    
-    openxlsx::setColWidths(
-      wbGeneral, sheet = outName, cols = 1:ncol(inDT), widths = "10" )
-    # column numbers in WoS file for title, publicationName, and abstract 
-    colNums <- c(match("title",names(inDT)), match("publicationName",names(inDT)), match("abstract",names(inDT)))
-    openxlsx::setColWidths(
-      wbGeneral, sheet = outName, cols = colNums, widths = c(40,30,70))
-    
-    openxlsx::addStyle(
-      wbGeneral, sheet = outName, style = numStyle, rows = 1:nrow(inDT) + 1, cols = 2:ncol(inDT), # +1 added Mar 24, 2017
-      gridExpand = TRUE )
-    openxlsx::addStyle(
-      wbGeneral, sheet = outName, style = wrapStyle, rows = 1:nrow(inDT) + 1, cols = 1:ncol(inDT), # +1 added Mar 24, 2017
-      gridExpand = TRUE )
-    
     
     openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Metadata")
     openxlsx::writeDataTable(
       wbGeneral,
-      DT,  sheet = "Metadata", startRow = 1, startCol = 1, rowNames = FALSE,
+      metadata,  sheet = "Metadata", startRow = 1, startCol = 1, rowNames = FALSE,
       colNames = TRUE, withFilter = TRUE)
     
-
     openxlsx::setColWidths(
       wbGeneral, sheet = "Metadata", cols = 1:2 , widths = c(20,70))
+    
+    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "SCOPUS complete")
+    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "WOK unique")
+    
+    openxlsx::writeDataTable(
+      wbGeneral,
+      inDT.scopus,  sheet = "SCOPUS complete", startRow = 1, startCol = 1, rowNames = FALSE,
+      colNames = TRUE, withFilter = TRUE)
+
+       openxlsx::writeDataTable(
+      wbGeneral,
+      inDT.wok,  sheet = "WOK unique", startRow = 1, startCol = 1, rowNames = FALSE,
+      colNames = TRUE, withFilter = TRUE)
+    
+    openxlsx::setColWidths(
+      wbGeneral, sheet = "SCOPUS complete", cols = 1:ncol(inDT.scopus), widths = "10" )
+    openxlsx::setColWidths(
+      wbGeneral, sheet = "WOK unique", cols = 1:ncol(inDT.wok), widths = "10" )
+    
+    # column numbers in WoS/SCOPUS file for title, publicationName, and abstract 
+    colNums.scopus <- c(match("title",names(inDT.scopus)), match("publicationName",names(inDT.scopus)), match("abstract",names(inDT.scopus)))
+    colNums.wok <- c(match("title", names(inDT.wok)), match("publicationName",names(inDT.wok)))
+    openxlsx::setColWidths(
+      wbGeneral, sheet = "SCOPUS complete", cols = colNums.scopus, widths = c(40,30,70))
+    openxlsx::setColWidths(
+      wbGeneral, sheet = "WOK unique", cols = colNums.wok, widths = c(40,30))
+    
+    openxlsx::addStyle(
+      wbGeneral, sheet = "SCOPUS complete", style = numStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 2:ncol(inDT.scopus), 
+      gridExpand = TRUE )
+    openxlsx::addStyle(
+      wbGeneral, sheet = "WOK unique", style = numStyle, rows = 1:nrow(inDT.wok) + 1, cols = 2:ncol(inDT.wok), 
+      gridExpand = TRUE )
+    
+    openxlsx::addStyle(
+      wbGeneral, sheet = "SCOPUS complete", style = wrapStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 1:ncol(inDT.scopus), #
+      gridExpand = TRUE )
+
+        openxlsx::addStyle(
+      wbGeneral, sheet = "WOK unique", style = wrapStyle, rows = 1:nrow(inDT.wok) + 1, cols = 1:ncol(inDT.wok), #
+      gridExpand = TRUE )
     
     xcelOutFileName = paste(destDir, "/", longName, "_", Sys.Date(), ".xlsx", sep = "") # added longName functionality June 20, 2018
     openxlsx::saveWorkbook(wbGeneral, xcelOutFileName, overwrite = TRUE)
@@ -157,4 +191,196 @@ removeOldVersions <- function(fileShortName,dir) {
   # remove .csv versions
   regExp <- paste("(?=^", fileShortName, ")(?=.*csv$)", sep = "")
   removeFcn(regExp)
+}
+
+# readin WOK function
+readinWOK <- function(query) {
+  firstRecord <- 1
+  nrResults <- -1
+  queryID = 1
+  count <- 100
+  notFinished = TRUE
+  url <- 'https://api.clarivate.com/api/woslite/'
+  # queryResults.complete <- data.table(UT=character(), Keyword.Keywords=character(), Title.Title=character(),
+  #                            Doctype.Doctype=character(), Author.Authors=character(), Author.BookGroupAuthors=character(),
+  #                            Author.BookAuthors=character(), Source.Pages=character(), Source.Issue=character(),
+  #                            Source.SourceTitle=character(), Source.Volume=character(), Source.Published.BiblioDate=character(),
+  #                            Source.Published.BiblioYear=character(), Source.BookSeriesTitle=character(), Source.SupplementNumber=character(),
+  #                            Source.SpecialIssue=character(), Other.Identifier.Eissn=character(), Other.Identifier.Doi=character(),
+  #                            Other.Identifier.Issn=character(), Other.ResearcherID.Disclaimer=character(), Other.Identifier.Ids=character(),
+  #                            Other.Contributor.ResearcherID.Names=character(), Other.Contributor.ResearcherID.ResearcherIDs=character(),
+  #                            Other.Identifier.Eisbn=character(), Other.Identifier.article_no=character(), Other.Identifier.Isbn=character(),
+  #                            Other.Identifier.Parent_Book_Doi=character())
+  queryResults <- c(Title.Title=character(), Author.Authors=character(), Author.BookAuthors=character(), Source.SourceTitle=character(),  Source.Pages=character(), 
+                    Source.Volume=character(), Source.Issue=character(), Source.Published.BiblioDate=character(), Source.Published.BiblioYear=character(), 
+                    Other.Identifier.Doi=character(),Other.Identifier.Isbn=character(), Doctype.Doctype=character(), Keyword.Keywords=character())
+  keepListCol <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
+                   "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
+                   "Other.Identifier.Doi","Other.Identifier.Eissn", "Doctype.Doctype", "Keyword.Keywords")
+  
+  newNames <- c("title","authors","bookAuthors", "publicationName", "pageRange", 
+                "volume","issue", "date", "year", 
+                "doi", "eIssn", "document_type", "keywords")
+  
+  # do some testing first and geet the ID for this query
+  {response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
+                         query = list(databaseId = 'WOK', usrQuery = query, count = 1, firstRecord = 1))
+    stop_for_status(response, task = "bad http status")
+    suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
+    j <- fromJSON(jsonResp)
+    QueryID  <- j$QueryResult$QueryID
+    nrResults <- j$QueryResult$RecordsFound
+    print(paste(nrResults, 'results from WOK query ID ', QueryID))
+    #    print(paste0("QueryID: ", QueryID))
+    if (nrResults > 5000) stop("Number of WOK records greater than 5000")
+    # if successful, load the initial download into queryResults
+    # jData <- as.data.table(flatten(j$Data))
+    # jData[, setdiff(names(jData), keepListCol) := NULL]
+    # jData[, ] <- lapply(jData[, ], as.character)
+    # queryResults <- rbind(queryResults, jData, fill=TRUE)
+    url = paste0('https://api.clarivate.com/api/woslite/query/', QueryID, "/") # get data from the specific query
+  }
+  
+  while (notFinished) {
+    if (nrResults < (firstRecord + count) & !nrResults == -1) {
+      count = nrResults - firstRecord
+    }
+    response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
+                          query = list(databaseId = 'WOK', usrQuery = query, count = count, firstRecord = firstRecord))
+    suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
+    j <- fromJSON(jsonResp)
+    QueryID  <- j$QueryResult$QueryID
+    print(paste0("QueryID: ", QueryID))
+    print(paste0("firstRecord: ", firstRecord))
+    print(paste0("nrResults: ", nrResults))
+    
+    jData <- as.data.table(flatten(j$Data))
+    jData[, setdiff(names(jData), keepListCol) := NULL]
+    jData[, ] <- lapply(jData[, ], as.character)
+    
+    queryResults <- rbind(queryResults, jData, fill=TRUE)
+    if (nrResults <= firstRecord + count) {
+      notFinished = FALSE
+      print('Done with WOK')
+    }else{
+      #      queryIdMode = TRUE
+      firstRecord = firstRecord + count
+    }
+  }
+  
+  setnames(queryResults, old = keepListCol, new = newNames, skip_absent=TRUE)
+  return(queryResults)
+}
+
+readinSCOPUS <- function(query) {
+  keepListCol.content <- c("dc:title","dc:creator","prism:publicationName", # removed "prism:url","dc:identifier","eid",
+                           "prism:eIssn","prism:volume","prism:issueIdentifier","prism:coverDate", "prism:pageRange",
+                           "prism:doi","dc:description","citedby-count","prism:aggregationType",
+                           "subtypeDescription", "authkeywords")
+  keepListCol.content.newNames <- c("title","firstAuthor","publicationName", # removed "url","identifier","eid",
+                                    "eIssn","volume","issue","date", "pageRange",
+                                    "doi","abstract","citations","pubType",
+                                    "document_type", "author_keywords")
+  
+  keepListCol.author <- c("@seq", "authname", "entry_number")
+  
+  searchCols <- c("title", "abstract", "author_keywords", "document_type") # what variables in the reference list should be searched for
+  # create blank queryResuls in case there are 0 results of a search
+  queryResults <- data.table(NULL)
+  # next few lines used to get totalresults
+  response = scopus_search(query = query, max_count = 1, count = 1,  start = 5, verbose = TRUE, view = c( "COMPLETE"))
+  nrResults <- response$total_results
+  if (nrResults > 5000) stop("Number of SCOPUS records greater than 5000")
+  if (nrResults == 0) {
+    print("No references for this query")
+  }else{
+    response = scopus_search(query = query, max_count = nrResults, count = 25,  start = 0, verbose = FALSE, view = c("COMPLETE"))
+    df <- gen_entries_to_df(response$entries)
+    dt.content <- as.data.table(df$df)
+    dt.content[, setdiff(names(dt.content), keepListCol.content) := NULL]
+    # cat(sort(names(dt.content)), "\n\n")
+    # print("Next")
+    # cat(sort(keepListCol.content), "\n")
+    # if (!all(str_detect(sort(names(dt.content)),sort(keepListCol.content)))) stop("missing column names")
+    setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames)
+    dt.authorInfo <- as.data.table(df$author)
+    dt.authorInfo[, setdiff(names(dt.authorInfo), keepListCol.author) := NULL]
+    
+    authsList <- data.table(authrs = character())
+    for (i in unique(dt.authorInfo$entry_number)) {
+      temp <-dt.authorInfo[entry_number == i, authname]
+      temp <- as.list(paste(temp, collapse = ", "))
+      authsList <- rbind(authsList, temp)
+    }
+    queryResults <- unique(dt.content)
+    temp.author <- unique(dt.authorInfo)
+    
+    for (i in searchStrings.names) {
+      queryResults[, (i) := "None"]
+    }
+    
+    # new columns with no search strings. Used for manual entry of information
+    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system", "study_type", "study_period", "methodology", 
+                                 "adapt_strat", "resid_damage", "comments")
+    # default values
+    for (i in colsWithNoSearchStrings) {
+      queryResults[, (i) := "None"]
+    }
+    queryResults[, keepRef := "No"]
+    queryResults[, notPeerRev := "No"]
+    
+    setkey(queryResults)
+    
+    for (i in 1:length(searchStrings)) {
+      searchSt <- eval( parse(text = searchStrings[i]))
+      for (j in searchSt) {
+        i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x))), .SDcols = searchCols]
+        queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]),j, sep = ", ")]
+      }
+    }
+    
+    for (i in searchStrings.names){
+      queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
+    }
+    for (i in searchStrings.names){
+      queryResults[, (i) := gsub(paste0("No, "), "", get(i))]
+    }
+    for (i in searchStrings.names){
+      queryResults[, (i) := gsub(paste0(i, ", "), "", get(i))]
+    }
+    queryResults[, author_keywords := str_replace_all(author_keywords, "\\|, ", "")]
+    queryResults[, author_keywords := str_replace_all(author_keywords, "\\|", ",")]
+  }
+  return(queryResults)
+}
+
+prepareSpreadsheet <- function(queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName) {
+  # construct metadata variable
+  DT <- data.table(
+    variable_name = character(),
+    variable_value = character()
+  )
+  
+  metadata.querystring.scopus <- list("SCOPUS query", query.scopus)
+  metadata.querystring.wok <- list("WOK query", query.wok)
+  metadata.datestring <- list("date queried", as.character(Sys.Date()))
+  metadata.recordCount.scopus <- list("SCOPUS reference count", nrow(queryResults.scopus))
+  metadata.recordCount.wok <- list("WOK only reference count", nrow(queryResults.wok))
+  metadata.searchStringLabel <- list("search string names", "search string content, SCOPUS only")
+  
+  DT <- rbind(DT, metadata.querystring.scopus)
+  DT <- rbind(DT, metadata.querystring.wok)
+  DT <- rbind(DT, metadata.datestring)
+  DT <- rbind(DT, metadata.recordCount.scopus)
+  DT <- rbind(DT, metadata.recordCount.wok)
+  DT <- rbind(DT, metadata.searchStringLabel)
+  
+  for (i in 1:length(searchStrings)) {
+    newRow <- list(searchStrings.names[i], paste(get(searchStrings[i]), collapse = ", "))
+    DT <- rbind(DT, newRow)
+  }
+  inDT.scopus <- queryResults.scopus
+  inDT.wok <- queryResults.wok
+  metadata <- DT
+  cleanup(metadata, inDT.scopus = inDT.scopus, inDT.wok = inDT.wok, outName = outName, destDir = "results", writeFiles = "xlsx")
 }
