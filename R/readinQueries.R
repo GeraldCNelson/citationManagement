@@ -14,10 +14,17 @@ queries <- read_excel("data-raw/queries.xlsx")
 yearCoverage.scopus <- "> 2013"
 yearCoverage.wok <- "= 2014-2019"
 
+#get info for all the queries in queries from wok database
+queryInfo <- getWOKinfo(queries)
+inDT <- queryInfo
+outName <- "queriesInfo.WOK"
+desc = "Web of Knowledge Query, QueryId, and number of references for each query in queries.xlsx"
+cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx")
+
 # assemble queries
 queryRowNumber <- 16
-rawQuery <- queries[queryRowNumber,2]
-outFileName <- queries[queryRowNumber,1]
+rawQuery <- queries[queryRowNumber,3]
+outFileName <- queries[queryRowNumber,2]
 # rawQuery.scopus <- gsub('" ', '} ', rawQuery)
 # rawQuery.scopus <- gsub('"', '{ ', rawQuery.scopus)
 query.scopus <- sprintf('TITLE-ABS-KEY({climate change} AND %s) AND PUBYEAR %s', rawQuery, yearCoverage.scopus)
@@ -55,3 +62,5 @@ doi2bib(dois.combined, file = paste("results/", outFileName, "_", Sys.Date(),".b
 
 # doi2bib(doi.common, file = paste("results/", outFileName, "_scopus.bib"), quiet = TRUE)
 # doi2bib(doi.wok, file = paste("results/", outFileName, "_wok.bib"), quiet = TRUE)
+
+
