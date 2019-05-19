@@ -43,7 +43,7 @@ for (i in 1:queryCount) {
   outFileName <- queries[queryNumber %in% queryRowNumber, outFileName]
   # rawQuery.scopus <- gsub('" ', '} ', rawQuery)
   # rawQuery.scopus <- gsub('"', '{ ', rawQuery.scopus)
-  query.wok <- constructQuery.scopus(queryNum = queryRowNumber, queries, yearCoverage.scopus)
+  query.scopus <- constructQuery.scopus(queryNum = queryRowNumber, queries, yearCoverage.scopus)
   query.wok <- constructQuery.WOK(queryNum = queryRowNumber, queries, yearCoverage.wok)
   QueryID <- queries.small[queryNumber %in% queryRowNumber, QueryID] # for WOK
   nrResults <- queries.small[queryNumber %in% queryRowNumber, nrResults] # for WOK
