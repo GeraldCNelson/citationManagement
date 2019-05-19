@@ -1,3 +1,14 @@
+#Copyright (C) 2019 Gerald C. Nelson, except where noted.
+
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
+# for more details at http://www.gnu.org/licenses/.
 library(readxl)
 library(data.table)
 library(openxlsx)
@@ -106,54 +117,72 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
     longName <- outName
     outName <- strtrim(outName, c(31))
     
+    # first add the needed worksheets
     openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Metadata")
+    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "SCOPUS complete")
+    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "WOK unique")
+    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Notes")
+    
+    Notes <- data.table(Notes = character())
+    notesTextIntro <- list("This worksheet provide more details on the process of creating this workbook")
+    notesTextLicense <- list("Accessing either the SCOPUS or Clarivate databases requires either a key or an IP address associated with a institution buying access to the database. This version is based on access at the University of Illinois, Urbana-Champaign. Email nelson.gerald.c@gmail.com for directions on how to modify the code for your institution.")
+    notesTextWorkbookNames <- list("The 'SCOPUS complete' workbook contains all the information from the SCOPUS query. The 'WOK unique' workbook has only records that are not contained in the SCOPUS complete workbook. The UIUC WOK license doesn't including downloading abstracts so the subsetting columns are not available." )
+    notesTextSubsetting <- list("The 'SCOPUS complete' workbook contains several subsetting columns. They are listed in the Metadata workbook beneath the row with 'search string names' in the first column.")
+    notesTextgithub <- list("The code and data for this project are open source and available at 'https://github.com/GeraldCNelson/citationManagement'. ")
+    Notes <- rbindlist(list(Notes, notesTextIntro, notesTextLicense, notesTextWorkbookNames, notesTextSubsetting, notesTextgithub))
+    
+    #add data
     openxlsx::writeDataTable(
       wbGeneral,
       metadata,  sheet = "Metadata", startRow = 1, startCol = 1, rowNames = FALSE,
       colNames = TRUE, withFilter = TRUE)
-    
-    openxlsx::setColWidths(
-      wbGeneral, sheet = "Metadata", cols = 1:2 , widths = c(20,70))
-    
-    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "SCOPUS complete")
-    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "WOK unique")
-    
     openxlsx::writeDataTable(
       wbGeneral,
       inDT.scopus,  sheet = "SCOPUS complete", startRow = 1, startCol = 1, rowNames = FALSE,
       colNames = TRUE, withFilter = TRUE)
-    
     openxlsx::writeDataTable(
       wbGeneral,
       inDT.wok,  sheet = "WOK unique", startRow = 1, startCol = 1, rowNames = FALSE,
       colNames = TRUE, withFilter = TRUE)
+    openxlsx::writeDataTable(
+      wbGeneral,
+      Notes,  sheet = "Notes", startRow = 1, startCol = 1, rowNames = FALSE,
+      colNames = TRUE, withFilter = TRUE)
     
-    openxlsx::setColWidths(
-      wbGeneral, sheet = "SCOPUS complete", cols = 1:ncol(inDT.scopus), widths = "10" )
-    openxlsx::setColWidths(
-      wbGeneral, sheet = "WOK unique", cols = 1:ncol(inDT.wok), widths = "10" )
-    
-    # column numbers in WoS/SCOPUS file for title, publicationName, and abstract 
+    # set column widths here
+    # column numbers in WoS/SCOPUS files for title, publicationName, and abstract 
     colNums.scopus <- c(match("title",names(inDT.scopus)), match("publicationName",names(inDT.scopus)), match("abstract",names(inDT.scopus)))
     colNums.wok <- c(match("title", names(inDT.wok)), match("publicationName",names(inDT.wok)))
     openxlsx::setColWidths(
+      wbGeneral, sheet = "Metadata", cols = 1:2 , widths = c(20,70))
+    openxlsx::setColWidths(
+      wbGeneral, sheet = "SCOPUS complete", cols = 1:ncol(inDT.scopus), widths = "10" )
+    openxlsx::setColWidths(
       wbGeneral, sheet = "SCOPUS complete", cols = colNums.scopus, widths = c(40,30,70))
     openxlsx::setColWidths(
+      wbGeneral, sheet = "WOK unique", cols = 1:ncol(inDT.wok), widths = "10" )
+    openxlsx::setColWidths(
       wbGeneral, sheet = "WOK unique", cols = colNums.wok, widths = c(40,30))
+    openxlsx::setColWidths(
+      wbGeneral, sheet = "Notes", cols = 1, widths = "80" )
     
+    openxlsx::addStyle(
+      wbGeneral, sheet = "Metadata", style = wrapStyle, rows = 1:nrow(metadata) + 1, cols = 1:2, 
+      gridExpand = TRUE )
     openxlsx::addStyle(
       wbGeneral, sheet = "SCOPUS complete", style = numStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 2:ncol(inDT.scopus), 
       gridExpand = TRUE )
     openxlsx::addStyle(
-      wbGeneral, sheet = "WOK unique", style = numStyle, rows = 1:nrow(inDT.wok) + 1, cols = 2:ncol(inDT.wok), 
-      gridExpand = TRUE )
-    
-    openxlsx::addStyle(
       wbGeneral, sheet = "SCOPUS complete", style = wrapStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 1:ncol(inDT.scopus), #
       gridExpand = TRUE )
-    
+    openxlsx::addStyle(
+      wbGeneral, sheet = "WOK unique", style = numStyle, rows = 1:nrow(inDT.wok) + 1, cols = 2:ncol(inDT.wok), 
+      gridExpand = TRUE )
     openxlsx::addStyle(
       wbGeneral, sheet = "WOK unique", style = wrapStyle, rows = 1:nrow(inDT.wok) + 1, cols = 1:ncol(inDT.wok), #
+      gridExpand = TRUE )
+    openxlsx::addStyle(
+      wbGeneral, sheet = "Notes", style = wrapStyle, rows = 1:nrow(Notes), cols = 1:2, #
       gridExpand = TRUE )
     
     xcelOutFileName = paste(destDir, "/", longName, "_", Sys.Date(), ".xlsx", sep = "") # added longName functionality June 20, 2018
@@ -272,20 +301,88 @@ readinWOK <- function(query) {
   return(queryResults)
 }
 
+# readin WOK function using a queryID
+readinWOKWithQueryID <- function(query, QueryID, nrResults) {
+  firstRecord <- 1
+  # nrResults <- -1
+  #  queryID = 1
+  count <- 100
+  notFinished = TRUE
+  url <- paste0('https://api.clarivate.com/api/woslite/query/', QueryID)
+  # queryResults.complete <- data.table(UT=character(), Keyword.Keywords=character(), Title.Title=character(),
+  #                            Doctype.Doctype=character(), Author.Authors=character(), Author.BookGroupAuthors=character(),
+  #                            Author.BookAuthors=character(), Source.Pages=character(), Source.Issue=character(),
+  #                            Source.SourceTitle=character(), Source.Volume=character(), Source.Published.BiblioDate=character(),
+  #                            Source.Published.BiblioYear=character(), Source.BookSeriesTitle=character(), Source.SupplementNumber=character(),
+  #                            Source.SpecialIssue=character(), Other.Identifier.Eissn=character(), Other.Identifier.Doi=character(),
+  #                            Other.Identifier.Issn=character(), Other.ResearcherID.Disclaimer=character(), Other.Identifier.Ids=character(),
+  #                            Other.Contributor.ResearcherID.Names=character(), Other.Contributor.ResearcherID.ResearcherIDs=character(),
+  #                            Other.Identifier.Eisbn=character(), Other.Identifier.article_no=character(), Other.Identifier.Isbn=character(),
+  #                            Other.Identifier.Parent_Book_Doi=character())
+  queryResults <- c(Title.Title=character(), Author.Authors=character(), Author.BookAuthors=character(), Source.SourceTitle=character(),  Source.Pages=character(), 
+                    Source.Volume=character(), Source.Issue=character(), Source.Published.BiblioDate=character(), Source.Published.BiblioYear=character(), 
+                    Other.Identifier.Doi=character(),Other.Identifier.Isbn=character(), Doctype.Doctype=character(), Keyword.Keywords=character())
+  keepListCol <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
+                   "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
+                   "Other.Identifier.Doi","Other.Identifier.Eissn", "Doctype.Doctype", "Keyword.Keywords")
+  
+  newNames <- c("title","authors","bookAuthors", "publicationName", "pageRange", 
+                "volume","issue", "date", "year", 
+                "doi", "eIssn", "document_type", "keywords")
+  
+  while (notFinished) {
+    if (nrResults < (firstRecord + count) & !nrResults == -1) {
+      count = nrResults - firstRecord
+    }
+    response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
+                          query = list(databaseId = 'WOK', usrQuery = query, count = count, firstRecord = firstRecord))
+    suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
+    j <- fromJSON(jsonResp)
+    QueryID  <- j$QueryResult$QueryID
+    print(paste0("QueryID: ", QueryID))
+    print(paste0("firstRecord: ", firstRecord))
+    print(paste0("nrResults: ", nrResults))
+    
+    jData <- as.data.table(flatten(j$Data))
+    jData[, setdiff(names(jData), keepListCol) := NULL]
+    jData[, ] <- lapply(jData[, ], as.character)
+    
+    queryResults <- rbind(queryResults, jData, fill=TRUE)
+    if (nrResults <= firstRecord + count) {
+      notFinished = FALSE
+      print('Done with WOK')
+    }else{
+      #      queryIdMode = TRUE
+      firstRecord = firstRecord + count
+    }
+  }
+  
+  setnames(queryResults, old = keepListCol, new = newNames, skip_absent=TRUE)
+  queryResults[, eIssn := gsub("-", "", eIssn)]
+  return(queryResults)
+}
+
 constructQuery.WOK <- function(queryNum, queries, yearCoverage.wok) {
-  rawQuery <- queries[queryNum,3]
+  rawQuery <- queries[queryNumber %in% queryNum,query]
   query.wok <- sprintf('TS=("climate change" AND %s) AND PY %s', rawQuery, yearCoverage.wok)
   query.wok <- gsub('"',"'", query.wok )
   return(query.wok)
 }
 
-getWOKinfo <- function(queries) {
-  queryInfo <- data.table(query = character(), QueryID = numeric(), nrResults = (numeric()))
+constructQuery.scopus <- function(queryNum, queries, yearCoverage.wok) {
+  rawQuery <- queries[queryNumber %in% queryNum,query]
+  query.scopus <- sprintf('TITLE-ABS-KEY({climate change} AND %s) AND PUBYEAR %s', rawQuery, yearCoverage.scopus)
+  return(query.scopus)
+}
+
+getWOKinfo <- function(queries, yearCoverage.wok) {
+  queryInfo <- data.table(queryNumber = character(), query = character(), QueryID = numeric(), nrResults = (numeric()))
   url.wok <- 'https://api.clarivate.com/api/woslite/'
   workingText <- "Working ."
   for (i in 1: nrow(queries)) {
     print(workingText)
-    query.wok <- constructQuery.WOK(i, queries, yearCoverage.wok)
+    query.wok <- constructQuery.WOK(queryNum = i, queries = queries, yearCoverage.wok = yearCoverage.wok)
+    #    print(query.wok)
     response.wok <- httr::GET(url.wok, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                               query = list(databaseId = 'WOK', usrQuery = query.wok, count = 1, firstRecord = 1))
     # stop_for_status(response, task = "bad http status")
@@ -293,11 +390,13 @@ getWOKinfo <- function(queries) {
     j <- fromJSON(jsonResp)
     if (!is.null(j$code)) print(paste0("This query is malformed: ", query.wok))
     QueryID  <- j$QueryResult$QueryID
-    if (is.null(QueryID))   print(paste0(i, "th row has QueryID null."))
+    # print(paste("QueryID: ", QueryID))
+    # print(paste("nrResults: ", nrResults))
+    # if (is.null(QueryID))   print(paste0(i, "th row has QueryID null."))
     nrResults <- j$QueryResult$RecordsFound
-    newRow <- list(query.wok, QueryID, nrResults)
-#    print(paste(query.wok, "; ", QueryID, ";" , nrResults))
-#    print(newRow)
+    newRow <- list(queries$queryNumber[i], query.wok, QueryID, nrResults)
+    #    print(paste(query.wok, "; ", QueryID, ";" , nrResults))
+    #    print(newRow)
     queryInfo <- rbind(queryInfo, newRow)
     Sys.sleep(0.4)
     workingText <- paste0(workingText, ".")
@@ -401,7 +500,9 @@ prepareSpreadsheet <- function(queryResults.scopus, query.scopus, queryResults.w
   metadata.recordCount.scopus <- list("SCOPUS reference count", nrow(queryResults.scopus))
   metadata.recordCount.wok <- list("WOK only reference count", nrow(queryResults.wok))
   metadata.searchStringLabel <- list("search string names", "search string content, SCOPUS only")
+  metadata.notes <- list("See Notes worksheet for more details.", "")
   
+  DT <- rbind(DT, metadata.notes) # put here to put the recommendation to read the Notes at the top of the metadata.
   DT <- rbind(DT, metadata.querystring.scopus)
   DT <- rbind(DT, metadata.querystring.wok)
   DT <- rbind(DT, metadata.datestring)
