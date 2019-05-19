@@ -37,7 +37,7 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 queries.small <- queryInfo[nrResults < 2000,]
 queryCount <- nrow(queries.small)
 for (i in 1:queryCount) {
-  print(paste0("working on query ", " of ", queryCount))
+  print(paste0("working on query ", i, " of ", queryCount))
   queryRowNumber <- queries.small[i, queryNumber]
   rawQuery <- queries[queryNumber %in% queryRowNumber,query]
   outFileName <- queries[queryNumber %in% queryRowNumber, outFileName]
@@ -71,7 +71,7 @@ for (i in 1:queryCount) {
     eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
     queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
     
-    prepareSpreadsheet(queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outName)
+    prepareSpreadsheet(queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
   }
 }
 

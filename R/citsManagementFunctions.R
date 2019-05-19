@@ -279,9 +279,9 @@ readinWOK <- function(query) {
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
     QueryID  <- j$QueryResult$QueryID
-    print(paste0("QueryID: ", QueryID))
-    print(paste0("firstRecord: ", firstRecord))
-    print(paste0("nrResults: ", nrResults))
+    # print(paste0("QueryID: ", QueryID))
+    # print(paste0("firstRecord: ", firstRecord))
+    # print(paste0("nrResults: ", nrResults))
     
     jData <- as.data.table(flatten(j$Data))
     jData[, setdiff(names(jData), keepListCol) := NULL]
@@ -339,10 +339,10 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
     QueryID  <- j$QueryResult$QueryID
-    print(paste0("QueryID: ", QueryID))
-    print(paste0("firstRecord: ", firstRecord))
-    print(paste0("nrResults: ", nrResults))
-    
+    # print(paste0("QueryID: ", QueryID))
+    # print(paste0("firstRecord: ", firstRecord))
+    # print(paste0("nrResults: ", nrResults))
+    # 
     jData <- as.data.table(flatten(j$Data))
     jData[, setdiff(names(jData), keepListCol) := NULL]
     jData[, ] <- lapply(jData[, ], as.character)
@@ -421,7 +421,7 @@ readinSCOPUS <- function(query) {
   # create blank queryResuls in case there are 0 results of a search
   queryResults <- data.table(NULL)
   # next few lines used to get totalresults
-  response = scopus_search(query = query, max_count = 1, count = 1,  start = 5, verbose = TRUE, view = c( "COMPLETE"))
+  response = scopus_search(query = query, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
   nrResults <- response$total_results
   if (nrResults > 5000) stop("Number of SCOPUS records greater than 5000")
   if (nrResults == 0) {
@@ -435,7 +435,7 @@ readinSCOPUS <- function(query) {
     # print("Next")
     # cat(sort(keepListCol.content), "\n")
     # if (!all(str_detect(sort(names(dt.content)),sort(keepListCol.content)))) stop("missing column names")
-    setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames)
+    setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames, skip_absent=TRUE)
     dt.authorInfo <- as.data.table(df$author)
     dt.authorInfo[, setdiff(names(dt.authorInfo), keepListCol.author) := NULL]
     
@@ -484,6 +484,7 @@ readinSCOPUS <- function(query) {
     queryResults[, author_keywords := str_replace_all(author_keywords, "\\|, ", "")]
     queryResults[, author_keywords := str_replace_all(author_keywords, "\\|", ",")]
   }
+  print('Done with SCOPUS')
   return(queryResults)
 }
 
