@@ -25,32 +25,8 @@ regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
 searchStrings.countries <- regions_lookup$country_name.ISO
 searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
 # other search strings
-searchStrings.RCP <- c("RCP", "RCP2.6", "RCP6.0", "RCP4.5", "RCP8.5", "CMIP", "SRES") # entries in the added RCP column
-searchStrings.SSP <- c("SSP",  "SSP1", "SSP2", "SSP3", "SSP4","SSP5") # entries in the added SSP column
-searchStrings.regions <- c("Latin America", "Central America", "Caribbean", 
-                           "Europe", "Northern Europe", "Western Europe", "Southern Europe", "Eastern Europe", "Western Asia", "Middle East",
-                           "Asia", "South Asia", "East Asia", "Central Asia", "Australia", "New Zealand",
-                           "Southeast Asia", "Africa", "East Africa", "West Africa", "Central Africa", "North Africa") 
-searchStrings.climateChange <- c("impact*", "adapt*", "mitigat*")
-searchStrings.animals <- c("ruminnt", "cattle", "beef", "goat", "sheep", "pig", "swine", 
-                           "pork", "chicken", "poultry")
-searchStrings.cereals <- c("cereal*", "rice", "maize", "corn", "wheat", "sorghum", "millet")
-searchStrings.fruits <- c("frui*", "tomato*", "strawberr*", "blueberr*", "raspberr*", "grap*")
-searchStrings.vegetables <- c("veget*", "caulif*", "tomato*")
-searchStrings.roots <- c("cassava", "yam", "potato", "sweet+potato")
-searchStrings.stimulants <- c("coffee", "cocoa", "tea")
-searchStrings.fish <- c("fish", "seafood", "molluscs", "salmon", "tuna", "hake")
-searchStrings.foodSec <- c("food security", "food insecure*",  "food access*",  
-                           "food sufficien*", "food insufficien*","food stability")
-searchStrings.notPeerRev <- c("Conference Proceeding", "Letter", "Review", "Correction", "Editorial Material")
-searchStrings.timePeriod <- c("*century", "mid century", "end century", "2030", "2025", "2050", "2080", "2100")
-searchStrings.econ <- c("profit*", "finance*", "economic*", "price", "price+variability") 
-searchStrings <- c("searchStrings.RCP", "searchStrings.SSP", "searchStrings.regions", "searchStrings.countries", 
-                   "searchStrings.climateChange", "searchStrings.foodSec",
-                   "searchStrings.animals", "searchStrings.cereals", "searchStrings.fruits", "searchStrings.vegetables", "searchStrings.roots",
-                   "searchStrings.stimulants", "searchStrings.fish",
-                   "searchStrings.timePeriod", 
-                   "searchStrings.econ", "searchStrings.notPeerRev")
+searchStringsList <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "searchTerms"))
+searchStrings <- searchStringsList$searchStringName
 searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 
 #' Title cleanupRefFiles - remove old versions and save rds and xlsx or csv versions of the file
@@ -270,7 +246,10 @@ readinWOK <- function(query) {
     url = paste0('https://api.clarivate.com/api/woslite/query/', QueryID, "/") # get data from the specific query
   }
   
+  step = 0
   while (notFinished) {
+    step = step + 1
+    print(step)
     if (nrResults < (firstRecord + count) & !nrResults == -1) {
       count = nrResults - firstRecord
     }
@@ -282,7 +261,7 @@ readinWOK <- function(query) {
     # print(paste0("QueryID: ", QueryID))
     # print(paste0("firstRecord: ", firstRecord))
     # print(paste0("nrResults: ", nrResults))
-    
+#    print(str(j$Data, max.level = 2))
     jData <- as.data.table(flatten(j$Data))
     jData[, setdiff(names(jData), keepListCol) := NULL]
     jData[, ] <- lapply(jData[, ], as.character)
@@ -336,9 +315,10 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     }
     response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                           query = list(databaseId = 'WOK', usrQuery = query, count = count, firstRecord = firstRecord))
+    Sys.sleep(0.4)
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
-    QueryID  <- j$QueryResult$QueryID
+    # QueryID  <- j$QueryResult$QueryID
     # print(paste0("QueryID: ", QueryID))
     # print(paste0("firstRecord: ", firstRecord))
     # print(paste0("nrResults: ", nrResults))
@@ -359,29 +339,33 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   
   setnames(queryResults, old = keepListCol, new = newNames, skip_absent=TRUE)
   queryResults[, eIssn := gsub("-", "", eIssn)]
+  queryResults[, keepRef := "y"]
+  setcolorder(queryResults, "keepRef")
   return(queryResults)
 }
 
-constructQuery.WOK <- function(queryNum, queries, yearCoverage.wok) {
-  rawQuery <- queries[queryNumber %in% queryNum,query]
-  query.wok <- sprintf('TS=("climate change" AND %s) AND PY %s', rawQuery, yearCoverage.wok)
+constructQuery.WOK <- function(rawQuery, yearCoverage.wok) {
+  query.wok <- sprintf('TS=(("climate change" OR "climate variability" OR "global warming" OR "greenhouse effect" OR "extreme weather" OR "climate hazard") AND (%s)) AND PY %s', rawQuery, yearCoverage.wok)
   query.wok <- gsub('"',"'", query.wok )
   return(query.wok)
 }
 
-constructQuery.scopus <- function(queryNum, queries, yearCoverage.wok) {
-  rawQuery <- queries[queryNumber %in% queryNum,query]
-  query.scopus <- sprintf('TITLE-ABS-KEY({climate change} AND %s) AND PUBYEAR %s', rawQuery, yearCoverage.scopus)
+constructQuery.scopus <- function(rawQuery, yearCoverage.scopus) {
+  query.scopus <- sprintf('TITLE-ABS-KEY(("climate change" OR "climate variability" OR "global warming" OR "greenhouse effect" OR "extreme weather" OR "climate hazard") AND (%s)) AND PUBYEAR %s', rawQuery, yearCoverage.scopus)
   return(query.scopus)
 }
 
-getWOKinfo <- function(queries, yearCoverage.wok) {
-  queryInfo <- data.table(queryNumber = character(), query = character(), QueryID = numeric(), nrResults = (numeric()))
+getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus) {
+  queryInfo <- data.table(sectionName = character(),fileName = character(), queryNumber = character(), rawQuery = character(), 
+                          QueryID.wok = numeric(),QueryID.scopus = numeric(), nrResults.wok = numeric(), nrResults.scopus = numeric(), query.wok = character(), query.scopus = character())
   url.wok <- 'https://api.clarivate.com/api/woslite/'
-  workingText <- "Working ."
+  workingText <- "Working on "
   for (i in 1: nrow(queries)) {
-    print(workingText)
-    query.wok <- constructQuery.WOK(queryNum = i, queries = queries, yearCoverage.wok = yearCoverage.wok)
+    rawQuery <- queries[i, query]
+    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok)
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus)
+    print(paste( workingText, query.wok))
+    
     #    print(query.wok)
     response.wok <- httr::GET(url.wok, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                               query = list(databaseId = 'WOK', usrQuery = query.wok, count = 1, firstRecord = 1))
@@ -389,12 +373,37 @@ getWOKinfo <- function(queries, yearCoverage.wok) {
     suppressMessages(jsonResp <- content(response.wok, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
     if (!is.null(j$code)) print(paste0("This query is malformed: ", query.wok))
-    QueryID  <- j$QueryResult$QueryID
+    QueryID.wok  <- j$QueryResult$QueryID
     # print(paste("QueryID: ", QueryID))
     # print(paste("nrResults: ", nrResults))
     # if (is.null(QueryID))   print(paste0(i, "th row has QueryID null."))
-    nrResults <- j$QueryResult$RecordsFound
-    newRow <- list(queries$queryNumber[i], query.wok, QueryID, nrResults)
+    nrResults.wok <- j$QueryResult$RecordsFound
+    response = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
+    nrResults.scopus <- response$total_results
+    QueryID.scopus <- NA
+    
+    newRow <- list(queries$sectionName[i], queries$outFileName[i], queries$queryNumber[i], rawQuery, QueryID.wok, QueryID.scopus, nrResults.wok, nrResults.scopus, query.wok, query.scopus)
+    queryInfo <- rbind(queryInfo, newRow)
+    Sys.sleep(0.4)
+  }
+  print("Done!")
+  return(queryInfo)
+}
+
+getScopusinfo <- function(queries, yearCoverage.scopus) {
+  queryInfo <- data.table(query = character(), QueryID = numeric(), nrResults = (numeric()))
+ workingText <- "Working ."
+  for (i in 1: nrow(queries)) {
+    print(workingText)
+    rawQuery <- queries[i, query]
+    query <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus)
+    
+    #    print(query.wok)
+    response = scopus_search(query = query, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
+    nrResults <- response$total_results
+    QueryID <- "unknown"
+    
+    newRow <- list(queries$outFileName[i], queries$queryNumber[i], query.wok, QueryID, nrResults)
     #    print(paste(query.wok, "; ", QueryID, ";" , nrResults))
     #    print(newRow)
     queryInfo <- rbind(queryInfo, newRow)
@@ -459,7 +468,8 @@ readinSCOPUS <- function(query) {
     for (i in colsWithNoSearchStrings) {
       queryResults[, (i) := "None"]
     }
-    queryResults[, keepRef := "No"]
+    queryResults[, keepRef := "y"]
+    setcolorder(queryResults, "keepRef")
     queryResults[, notPeerRev := "No"]
     
     setkey(queryResults)
@@ -527,11 +537,13 @@ prepareSpreadsheet <- function(queryResults.scopus, query.scopus, queryResults.w
 #' @param destDir directory where the cleanup takes place
 #' @param writeFiles format to use for writing output in addition to RDS
 #' @description brief description of the contents of the file
-cleanup <- function(inDT, outName, destDir, writeFiles, desc) {
+cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) {
   #    srcFile <- get("sourceFile", envir = .GlobalEnv)
   if (missing(writeFiles)) {writeFiles = "xlsx"}
   if (missing(destDir)) {destDir = fileloc("mData")}
-  
+  if (missing(numVal)) numVal = "0.000"
+  wrapColsOn = 1
+  if (missing(wrapCols)) wrapColsOn = 0
   colNames <- paste(colnames(inDT), collapse = ", ")
   # outInfo <- list(outName, srcFile, destDir, desc, colNames)
   # metadataDT <<- rbind(metadataDT, outInfo)
@@ -585,11 +597,26 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc) {
       colNames = TRUE, withFilter = TRUE)
     
     openxlsx::setColWidths(
-      wbGeneral, sheet = outName, cols = 1:ncol(inDT), widths = "auto" )
+      wbGeneral, sheet = outName, cols = 1:ncol(inDT), widths = 10)
     
-    numStyle <- openxlsx::createStyle(numFmt = "0.000")
+    if (!wrapColsOn == 0) {
+      openxlsx::setColWidths(
+        wbGeneral, sheet = outName, cols = wrapCols, widths = 60 )
+    }
+    
+    numStyle <- openxlsx::createStyle(numFmt = numVal, valign = "top")
+    wrapStyle <- createStyle( wrapText = TRUE, valign = "top")
+    
     openxlsx::addStyle(
-      wbGeneral, sheet = outName, style = numStyle, rows = 1:nrow(inDT) + 1, cols = 2:ncol(inDT), # +1 added Mar 24, 2017
+      wbGeneral, sheet = outName, style = numStyle, rows = 1:nrow(inDT) + 1, cols = 2:ncol(inDT),
+      gridExpand = TRUE )
+  
+    openxlsx::addStyle(
+      wbGeneral, sheet = outName, style = wrapStyle, rows = 1:nrow(inDT) + 1, cols = wrapCols,
+      gridExpand = TRUE )
+
+    openxlsx::addStyle(
+      wbGeneral, sheet = outName, style = wrapStyle, rows = 1:nrow(inDT) + 1, cols = 1,
       gridExpand = TRUE )
     
     xcelOutFileName = paste(destDir, "/", longName, "_", Sys.Date(), ".xlsx", sep = "") # added longName functionality June 20, 2018

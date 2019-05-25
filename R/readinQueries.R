@@ -19,22 +19,22 @@ if (!have_api_key()) stop("Missing api key")
 wosliteKey <- Sys.getenv("wosliteKey")
 
 # get list of queries
-queries <- as.data.table(read_excel("data-raw/queries.xlsx"))
+queries <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "Queries"))
 
 # year range
 yearCoverage.scopus <- "> 2013"
 yearCoverage.wok <- "= 2014-2019"
 
 #get info for all the queries in queries from wok database
-queryInfo <- getWOKinfo(queries, yearCoverage.wok)
+queryInfo <- getDBinfo(queries, yearCoverage.wok, yearCoverage.scopus)
 inDT <- queryInfo
-outName <- "queriesInfo.WOK"
-desc = "Web of Knowledge Query, QueryId, and number of references for each query in queries.xlsx"
-cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx")
+outName <- "queriesInfo.WOKnScopus"
+desc = "SCOPUS and Web of Knowledge Query, QueryId, and number of references for each query in queries.xlsx"
+cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx", numVal = "0", wrapCols = c(1,4, 9:10))
 
 # assemble queries
-#keep only queries that have less than 2000 references
-queries.small <- queryInfo[nrResults < 2000,]
+#keep only queries that have less than 3000 references
+queries.small <- queryInfo[nrResults.scopus < 5000,]
 queryCount <- nrow(queries.small)
 for (i in 1:queryCount) {
   print(paste0("working on query ", i, " of ", queryCount))
@@ -43,12 +43,12 @@ for (i in 1:queryCount) {
   outFileName <- queries[queryNumber %in% queryRowNumber, outFileName]
   # rawQuery.scopus <- gsub('" ', '} ', rawQuery)
   # rawQuery.scopus <- gsub('"', '{ ', rawQuery.scopus)
-  query.scopus <- constructQuery.scopus(queryNum = queryRowNumber, queries, yearCoverage.scopus)
-  query.wok <- constructQuery.WOK(queryNum = queryRowNumber, queries, yearCoverage.wok)
-  QueryID <- queries.small[queryNumber %in% queryRowNumber, QueryID] # for WOK
-  nrResults <- queries.small[queryNumber %in% queryRowNumber, nrResults] # for WOK
+  query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus) # need to use queries here to get at the raw query string
+  query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok) # need to use queries here to get at the raw query string
+  QueryID.wok <- queries.small[queryNumber %in% queryRowNumber, QueryID.wok] # for WOK
+  nrResults.wok <- queries.small[queryNumber %in% queryRowNumber, nrResults.wok] # for WOK
   # queryResults.wok <- readinWOK(query = query.wok)
-  queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID, nrResults = nrResults)
+  queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
   
   queryResults.scopus <- readinSCOPUS(query = query.scopus)
   
@@ -73,9 +73,15 @@ for (i in 1:queryCount) {
     
     prepareSpreadsheet(queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
   }
+  if (nrow(queryResults.scopus) == 0 ){
+    print(paste0("SCOPUS results for query ", i, ", query" , query.scopus, " are empty"))
+  }
+  if (nrow(queryResults.wok) == 0 ){
+    print(paste0("WOK results for query ", i, ", query" , query.qok, " are empty"))
+  }
 }
 
-dois.combined <- unique(c(doi.wok, doi.scopus))
+idois.combined <- unique(c(doi.wok, doi.scopus))
 doi2bib(dois.combined, file = paste("results/", outFileName, "_", Sys.Date(),".bib"), quiet = TRUE)
 
 # doi2bib(doi.common, file = paste("results/", outFileName, "_scopus.bib"), quiet = TRUE)
