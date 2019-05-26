@@ -20,6 +20,11 @@ library(jsonlite)
 library(stringr)
 library(doi2bib) #install with install.packages("remotes"); remotes::install_github("wkmor1/doi2bib")
 
+# get list of queries
+queries <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "Queries"))
+climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "CCSearchString"))
+CCSearchString <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChange", searchString]
+
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
 searchStrings.countries <- regions_lookup$country_name.ISO
@@ -27,6 +32,7 @@ searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
 # other search strings
 searchStringsList <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "searchTerms"))
 searchStrings <- searchStringsList$searchStringName
+searchStrings <- c("searchStrings.countries", "searchStrings.regionsByIncome", searchStrings)
 searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 
 #' Title cleanupRefFiles - remove old versions and save rds and xlsx or csv versions of the file
@@ -100,7 +106,7 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
     openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Notes")
     
     Notes <- data.table(Notes = character())
-    notesTextIntro <- list("This worksheet provide more details on the process of creating this workbook")
+    notesTextIntro <- list("This worksheet provides more details on the process of creating this workbook")
     notesTextLicense <- list("Accessing either the SCOPUS or Clarivate databases requires either a key or an IP address associated with a institution buying access to the database. This version is based on access at the University of Illinois, Urbana-Champaign. Email nelson.gerald.c@gmail.com for directions on how to modify the code for your institution.")
     notesTextWorkbookNames <- list("The 'SCOPUS complete' workbook contains all the information from the SCOPUS query. The 'WOK unique' workbook has only records that are not contained in the SCOPUS complete workbook. The UIUC WOK license doesn't including downloading abstracts so the subsetting columns are not available." )
     notesTextSubsetting <- list("The 'SCOPUS complete' workbook contains several subsetting columns. They are listed in the Metadata workbook beneath the row with 'search string names' in the first column.")
@@ -344,26 +350,26 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   return(queryResults)
 }
 
-constructQuery.WOK <- function(rawQuery, yearCoverage.wok) {
-  query.wok <- sprintf('TS=(("climate change" OR "climate variability" OR "global warming" OR "greenhouse effect" OR "extreme weather" OR "climate hazard") AND (%s)) AND PY %s', rawQuery, yearCoverage.wok)
+constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString) {
+  query.wok <- sprintf('PY %s AND TS=((%s) AND ((%s)))', yearCoverage.wok, rawQuery, CCSearchString)
   query.wok <- gsub('"',"'", query.wok )
   return(query.wok)
 }
 
-constructQuery.scopus <- function(rawQuery, yearCoverage.scopus) {
-  query.scopus <- sprintf('TITLE-ABS-KEY(("climate change" OR "climate variability" OR "global warming" OR "greenhouse effect" OR "extreme weather" OR "climate hazard") AND (%s)) AND PUBYEAR %s', rawQuery, yearCoverage.scopus)
+constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString) {
+  query.scopus <- sprintf('PUBYEAR %s AND TITLE-ABS-KEY((%s) AND ((%s)))', yearCoverage.scopus, rawQuery,  CCSearchString)
   return(query.scopus)
 }
 
-getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus) {
+getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchString = CCSearchString) {
   queryInfo <- data.table(sectionName = character(),fileName = character(), queryNumber = character(), rawQuery = character(), 
                           QueryID.wok = numeric(),QueryID.scopus = numeric(), nrResults.wok = numeric(), nrResults.scopus = numeric(), query.wok = character(), query.scopus = character())
   url.wok <- 'https://api.clarivate.com/api/woslite/'
-  workingText <- "Working on "
+  workingText <- "Working on query: "
   for (i in 1: nrow(queries)) {
     rawQuery <- queries[i, query]
-    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok)
-    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus)
+    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok, CCSearchString = CCSearchString)
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
     print(paste( workingText, query.wok))
     
     #    print(query.wok)
@@ -378,8 +384,8 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus) {
     # print(paste("nrResults: ", nrResults))
     # if (is.null(QueryID))   print(paste0(i, "th row has QueryID null."))
     nrResults.wok <- j$QueryResult$RecordsFound
-    response = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
-    nrResults.scopus <- response$total_results
+    response.scopus = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
+    nrResults.scopus <- response.scopus$total_results
     QueryID.scopus <- NA
     
     newRow <- list(queries$sectionName[i], queries$outFileName[i], queries$queryNumber[i], rawQuery, QueryID.wok, QueryID.scopus, nrResults.wok, nrResults.scopus, query.wok, query.scopus)
@@ -396,7 +402,7 @@ getScopusinfo <- function(queries, yearCoverage.scopus) {
   for (i in 1: nrow(queries)) {
     print(workingText)
     rawQuery <- queries[i, query]
-    query <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus)
+    query <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
     
     #    print(query.wok)
     response = scopus_search(query = query, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
@@ -498,7 +504,7 @@ readinSCOPUS <- function(query) {
   return(queryResults)
 }
 
-prepareSpreadsheet <- function(queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName) {
+prepareSpreadsheet <- function(sectionName, queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName) {
   # construct metadata variable
   DT <- data.table(
     variable_name = character(),
@@ -508,6 +514,7 @@ prepareSpreadsheet <- function(queryResults.scopus, query.scopus, queryResults.w
   metadata.querystring.scopus <- list("SCOPUS query", query.scopus)
   metadata.querystring.wok <- list("WOK query", query.wok)
   metadata.datestring <- list("date queried", as.character(Sys.Date()))
+  metadata.datestring <- list("Report section", sectionName)
   metadata.recordCount.scopus <- list("SCOPUS reference count", nrow(queryResults.scopus))
   metadata.recordCount.wok <- list("WOK only reference count", nrow(queryResults.wok))
   metadata.searchStringLabel <- list("search string names", "search string content, SCOPUS only")
@@ -623,5 +630,52 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
     openxlsx::saveWorkbook(wbGeneral, xcelOutFileName, overwrite = TRUE)
     #   cat("\nDone writing the xlsx for ", outName, sep = "")
     #  print(proc.time())
+  }
+}
+
+prepareOutput <- function(queriestoProcessList, queries) {
+  for (i in queriestoProcessList) {
+    print(paste0("working on query ", i, " of ", queriestoProcessList))
+    queryRowNumber <- queries[i, queryNumber]
+    rawQuery <- queries[queryNumber %in% queryRowNumber,query]
+    outFileName <- queries[queryNumber %in% queryRowNumber, outFileName]
+    # rawQuery.scopus <- gsub('" ', '} ', rawQuery)
+    # rawQuery.scopus <- gsub('"', '{ ', rawQuery.scopus)
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus) # need to use queries here to get at the raw query string
+    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok) # need to use queries here to get at the raw query string
+    QueryID.wok <- queries.small[queryNumber %in% queryRowNumber, QueryID.wok] # for WOK
+    nrResults.wok <- queries.small[queryNumber %in% queryRowNumber, nrResults.wok] # for WOK
+    # queryResults.wok <- readinWOK(query = query.wok)
+    queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
+    
+    queryResults.scopus <- readinSCOPUS(query = query.scopus)
+    
+    # process if both results have content
+    if (!nrow(queryResults.scopus) == 0 & (!nrow(queryResults.wok) == 0)) {
+      doi.wok <- sort(queryResults.wok$doi)
+      doi.scopus <- sort(queryResults.scopus$doi)
+      
+      doi.common <- doi.wok[doi.wok %in% doi.scopus]
+      doi.unique.wok <- doi.wok[!doi.wok %in% doi.scopus]
+      doi.unique.scopus <- doi.scopus[!doi.scopus %in% doi.wok]
+      queryResults.wok.unique <- queryResults.wok[!doi %in% doi.common,]
+      
+      # do the same thing with eIssns
+      eissn.wok <- sort(queryResults.wok$eIssn)
+      eissn.scopus <- sort(queryResults.scopus$eIssn)
+      
+      eissn.common <- eissn.wok[eissn.wok %in% eissn.scopus]
+      eissn.unique.wok <- eissn.wok[!eissn.wok %in% eissn.scopus]
+      eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
+      queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
+      
+      prepareSpreadsheet(sectionName = queries.small[i, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
+    }
+    if (nrow(queryResults.scopus) == 0 ){
+      print(paste0("SCOPUS results for query ", i, ", query" , query.scopus, " are empty"))
+    }
+    if (nrow(queryResults.wok) == 0 ){
+      print(paste0("WOK results for query ", i, ", query" , query.qok, " are empty"))
+    }
   }
 }
