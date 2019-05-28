@@ -267,7 +267,7 @@ readinWOK <- function(query) {
     # print(paste0("QueryID: ", QueryID))
     # print(paste0("firstRecord: ", firstRecord))
     # print(paste0("nrResults: ", nrResults))
-#    print(str(j$Data, max.level = 2))
+    #    print(str(j$Data, max.level = 2))
     jData <- as.data.table(flatten(j$Data))
     jData[, setdiff(names(jData), keepListCol) := NULL]
     jData[, ] <- lapply(jData[, ], as.character)
@@ -309,11 +309,11 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
                     Other.Identifier.Doi=character(),Other.Identifier.Isbn=character(), Doctype.Doctype=character(), Keyword.Keywords=character())
   keepListCol <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
                    "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
-                   "Other.Identifier.Doi","Other.Identifier.Eissn", "Doctype.Doctype", "Keyword.Keywords")
+                   "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
   
   newNames <- c("title","authors","bookAuthors", "publicationName", "pageRange", 
                 "volume","issue", "date", "year", 
-                "doi", "eIssn", "document_type", "keywords")
+                "doi", "eIssn", "isbn", "document_type", "keywords")
   
   while (notFinished) {
     if (nrResults < (firstRecord + count) & !nrResults == -1) {
@@ -328,12 +328,16 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     # print(paste0("QueryID: ", QueryID))
     # print(paste0("firstRecord: ", firstRecord))
     # print(paste0("nrResults: ", nrResults))
-    # 
-    jData <- as.data.table(flatten(j$Data))
-    jData[, setdiff(names(jData), keepListCol) := NULL]
-    jData[, ] <- lapply(jData[, ], as.character)
     
-    queryResults <- rbind(queryResults, jData, fill=TRUE)
+    if (!is.data.frame(j$Data)) { # a loop to skip over set of 100 records that has an internal server error
+      print(paste("j$Data is not a data frame. Nearest record is ", firstRecord))
+    } else {
+      jData <- as.data.table(flatten(j$Data))
+      jData[, setdiff(names(jData), keepListCol) := NULL]
+      jData[, ] <- lapply(jData[, ], as.character)
+      
+      queryResults <- rbind(queryResults, jData, fill=TRUE)
+    }
     if (nrResults <= firstRecord + count) {
       notFinished = FALSE
       print('Done with WOK')
@@ -398,7 +402,7 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
 
 getScopusinfo <- function(queries, yearCoverage.scopus) {
   queryInfo <- data.table(query = character(), QueryID = numeric(), nrResults = (numeric()))
- workingText <- "Working ."
+  workingText <- "Working ."
   for (i in 1: nrow(queries)) {
     print(workingText)
     rawQuery <- queries[i, query]
@@ -481,7 +485,10 @@ readinSCOPUS <- function(query) {
     setkey(queryResults)
     
     for (i in 1:length(searchStrings)) {
-      searchSt <- eval( parse(text = searchStrings[i]))
+    #  print(searchStrings[i])
+      searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString))
+    #  print(searchSt)
+      #     searchSt <- eval( parse(text = searchStrings[i]))
       for (j in searchSt) {
         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x))), .SDcols = searchCols]
         queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]),j, sep = ", ")]
@@ -507,9 +514,13 @@ readinSCOPUS <- function(query) {
 prepareSpreadsheet <- function(sectionName, queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName) {
   # construct metadata variable
   DT <- data.table(
-    variable_name = character(),
-    variable_value = character()
+    searchStringName = character(),
+    searchString = character()
   )
+  
+  #      variable_name = character(),
+  #   variable_value = character()
+  # )
   
   metadata.querystring.scopus <- list("SCOPUS query", query.scopus)
   metadata.querystring.wok <- list("WOK query", query.wok)
@@ -529,7 +540,8 @@ prepareSpreadsheet <- function(sectionName, queryResults.scopus, query.scopus, q
   DT <- rbind(DT, metadata.searchStringLabel)
   
   for (i in 1:length(searchStrings)) {
-    newRow <- list(searchStrings.names[i], paste(get(searchStrings[i]), collapse = ", "))
+    #   newRow <- list(searchStrings.names[i], paste(get(searchStrings[i]), collapse = ", "))
+    newRow <- as.list(searchStringsList[,.SD[i]])
     DT <- rbind(DT, newRow)
   }
   inDT.scopus <- queryResults.scopus
@@ -617,11 +629,11 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
     openxlsx::addStyle(
       wbGeneral, sheet = outName, style = numStyle, rows = 1:nrow(inDT) + 1, cols = 2:ncol(inDT),
       gridExpand = TRUE )
-  
+    
     openxlsx::addStyle(
       wbGeneral, sheet = outName, style = wrapStyle, rows = 1:nrow(inDT) + 1, cols = wrapCols,
       gridExpand = TRUE )
-
+    
     openxlsx::addStyle(
       wbGeneral, sheet = outName, style = wrapStyle, rows = 1:nrow(inDT) + 1, cols = 1,
       gridExpand = TRUE )
@@ -633,18 +645,16 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
   }
 }
 
-prepareOutput <- function(queriestoProcessList, queries) {
-  for (i in queriestoProcessList) {
-    print(paste0("working on query ", i, " of ", queriestoProcessList))
-    queryRowNumber <- queries[i, queryNumber]
-    rawQuery <- queries[queryNumber %in% queryRowNumber,query]
-    outFileName <- queries[queryNumber %in% queryRowNumber, outFileName]
-    # rawQuery.scopus <- gsub('" ', '} ', rawQuery)
-    # rawQuery.scopus <- gsub('"', '{ ', rawQuery.scopus)
-    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus) # need to use queries here to get at the raw query string
-    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok) # need to use queries here to get at the raw query string
-    QueryID.wok <- queries.small[queryNumber %in% queryRowNumber, QueryID.wok] # for WOK
-    nrResults.wok <- queries.small[queryNumber %in% queryRowNumber, nrResults.wok] # for WOK
+prepareOutput <- function(queryNum, queriestoProcessList, queries) {
+  if (queries[queryNumber %in% queryNum, nrResults.scopus] > 5000) {print(paste0("Number of results for scopus greater than 5000 for query ", i, ". Skipping it."))
+  }else{
+    print(paste0("working on query ", queryNum))
+    rawQuery <- queries[queryNumber %in% queryNum, rawQuery]
+    outFileName <- queries[queryNumber %in% queryNum, fileName]
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString) 
+    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString) 
+    QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
+    nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
     # queryResults.wok <- readinWOK(query = query.wok)
     queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
     
@@ -669,7 +679,7 @@ prepareOutput <- function(queriestoProcessList, queries) {
       eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
       queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
       
-      prepareSpreadsheet(sectionName = queries.small[i, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
+      prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
     }
     if (nrow(queryResults.scopus) == 0 ){
       print(paste0("SCOPUS results for query ", i, ", query" , query.scopus, " are empty"))
@@ -678,4 +688,5 @@ prepareOutput <- function(queriestoProcessList, queries) {
       print(paste0("WOK results for query ", i, ", query" , query.qok, " are empty"))
     }
   }
+  
 }
