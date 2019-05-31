@@ -21,7 +21,7 @@ library(stringr)
 library(doi2bib) #install with install.packages("remotes"); remotes::install_github("wkmor1/doi2bib")
 
 # get list of queries
-queries <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "Queries"))
+queries <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "Queries"))
 climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "CCSearchString"))
 CCSearchString <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChange", searchString]
 
@@ -31,8 +31,12 @@ searchStrings.countries <- regions_lookup$country_name.ISO
 searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
 # other search strings
 searchStringsList <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "searchTerms"))
+countrylist <- list("searchStrings.countries", as.list(searchStrings.countries))
+regionsByIncomeList <- list("searchStrings.regionsByIncome", as.list(searchStrings.regionsByIncome))
+searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
+# next line commented out because no need to have a column for searchStrings.regionsByIncome. It will be empty.
+# searchStringsList <- rbind(searchStringsList, list("searchStrings.regionsByIncome", list(searchStrings.regionsByIncome)))
 searchStrings <- searchStringsList$searchStringName
-searchStrings <- c("searchStrings.countries", "searchStrings.regionsByIncome", searchStrings)
 searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 
 #' Title cleanupRefFiles - remove old versions and save rds and xlsx or csv versions of the file
@@ -472,8 +476,7 @@ readinSCOPUS <- function(query) {
     }
     
     # new columns with no search strings. Used for manual entry of information
-    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system", "study_type", "study_period", "methodology", 
-                                 "adapt_strat", "resid_damage", "comments")
+    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system",  "resid_damage", "comments")
     # default values
     for (i in colsWithNoSearchStrings) {
       queryResults[, (i) := "None"]
@@ -485,12 +488,19 @@ readinSCOPUS <- function(query) {
     setkey(queryResults)
     
     for (i in 1:length(searchStrings)) {
-    #  print(searchStrings[i])
-      searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString))
-    #  print(searchSt)
-      #     searchSt <- eval( parse(text = searchStrings[i]))
+      searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
       for (j in searchSt) {
-        i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x))), .SDcols = searchCols]
+        # grepl and startsWith return a logical vector
+        if (grepl("*", j, fixed = TRUE)) {
+          jnew <-  gsub("*", "", j)
+          #         jnew <- paste0("\\<", jnew)
+          i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) startsWith(x, jnew))), .SDcols = searchCols]
+          #         print(paste("jnew ",  jnew))
+        } else {
+          i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x))), .SDcols = searchCols]
+          #          print(paste("j ",  j))
+        }
+             
         queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]),j, sep = ", ")]
       }
     }
@@ -498,6 +508,10 @@ readinSCOPUS <- function(query) {
     for (i in searchStrings.names){
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
     }
+    queryResults[, (searchStrings.names) := (lapply(.SD, function(x) {
+      sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse=','))
+    })), .SDcols = searchStrings.names]
+    
     for (i in searchStrings.names){
       queryResults[, (i) := gsub(paste0("No, "), "", get(i))]
     }
@@ -616,7 +630,7 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
       colNames = TRUE, withFilter = TRUE)
     
     openxlsx::setColWidths(
-      wbGeneral, sheet = outName, cols = 1:ncol(inDT), widths = 10)
+      wbGeneral, sheet = outName, cols = 1:ncol(inDT), widths = 12)
     
     if (!wrapColsOn == 0) {
       openxlsx::setColWidths(

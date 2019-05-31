@@ -33,7 +33,7 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have more than zero and less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000 & !nrResults.scopus == 0,]
 queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 17
+queryNum <- 2
 
 for (i in 1:nrow(queries.small)) {
   queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
