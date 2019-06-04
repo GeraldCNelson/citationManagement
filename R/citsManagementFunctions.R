@@ -22,7 +22,7 @@ library(doi2bib) #install with install.packages("remotes"); remotes::install_git
 
 # get list of queries
 queries <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "Queries"))
-climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "CCSearchString"))
+climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "CCSearchString"))
 CCSearchString <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChange", searchString]
 
 # get country names
@@ -30,7 +30,7 @@ regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
 searchStrings.countries <- regions_lookup$country_name.ISO
 searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
 # other search strings
-searchStringsList <- as.data.table(read_excel("data-raw/queries.xlsx", sheet = "searchTerms"))
+searchStringsList <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "searchTerms"))
 countrylist <- list("searchStrings.countries", as.list(searchStrings.countries))
 regionsByIncomeList <- list("searchStrings.regionsByIncome", as.list(searchStrings.regionsByIncome))
 searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
