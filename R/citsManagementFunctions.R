@@ -48,20 +48,6 @@ searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, writeFiles) {
   # sourceFile <- get("sourceFile", envir = .GlobalEnv)
   if (missing(writeFiles)) {writeFiles = "xlsx"}
-  # if (missing(destDir)) {destDir = fileloc("mData")}
-  
-  #  colNames <- paste(colnames(inDT), collapse = ", ")
-  #  outInfo <- list(outName, sourceFile, destDir, desc, colNames)
-  #  metadataDT <<- rbind(metadataDT, outInfo)
-  #  cat("\n", "Outfilename: ", outName, " Destination: ", Destination," Script: ", sourceFile," Desc: ", desc," Col. names: ", colNames, "\n")
-  #convert to a standard order
-  # oldOrder <- names(inDT)
-  # startOrder <- c("scenario",keyVariable("region"),"year")
-  # if (all(startOrder %in% oldOrder)) {
-  #   remainder <- oldOrder[!oldOrder %in% startOrder]
-  #   data.table::setcolorder(inDT,c(startOrder,remainder))
-  #   data.table::setorderv(inDT,c(startOrder,remainder))
-  # }
   
   removeOldVersions(outName, destDir)
   sprintf("\nWriting the rds for %s to %s ", outName, destDir)
@@ -105,7 +91,7 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
     
     # first add the needed worksheets
     openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Metadata")
-    openxlsx::addWorksheet(wb = wbGeneral, sheetName = "SCOPUS complete")
+    if (nrow(inDT.scopus) > 0) openxlsx::addWorksheet(wb = wbGeneral, sheetName = "SCOPUS complete")
     openxlsx::addWorksheet(wb = wbGeneral, sheetName = "WOK unique")
     openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Notes")
     
@@ -122,10 +108,12 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
       wbGeneral,
       metadata,  sheet = "Metadata", startRow = 1, startCol = 1, rowNames = FALSE,
       colNames = TRUE, withFilter = TRUE)
-    openxlsx::writeDataTable(
-      wbGeneral,
-      inDT.scopus,  sheet = "SCOPUS complete", startRow = 1, startCol = 1, rowNames = FALSE,
-      colNames = TRUE, withFilter = TRUE)
+    if (nrow(inDT.scopus) > 0) {
+      openxlsx::writeDataTable(
+        wbGeneral,
+        inDT.scopus,  sheet = "SCOPUS complete", startRow = 1, startCol = 1, rowNames = FALSE,
+        colNames = TRUE, withFilter = TRUE)
+    }
     openxlsx::writeDataTable(
       wbGeneral,
       inDT.wok,  sheet = "WOK unique", startRow = 1, startCol = 1, rowNames = FALSE,
@@ -141,10 +129,12 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
     colNums.wok <- c(match("title", names(inDT.wok)), match("publicationName",names(inDT.wok)))
     openxlsx::setColWidths(
       wbGeneral, sheet = "Metadata", cols = 1:2 , widths = c(20,70))
-    openxlsx::setColWidths(
-      wbGeneral, sheet = "SCOPUS complete", cols = 1:ncol(inDT.scopus), widths = "10" )
-    openxlsx::setColWidths(
-      wbGeneral, sheet = "SCOPUS complete", cols = colNums.scopus, widths = c(40,30,70))
+    if (nrow(inDT.scopus) > 0) {
+      openxlsx::setColWidths(
+        wbGeneral, sheet = "SCOPUS complete", cols = 1:ncol(inDT.scopus), widths = "10" )
+      openxlsx::setColWidths(
+        wbGeneral, sheet = "SCOPUS complete", cols = colNums.scopus, widths = c(40,30,70))
+    }
     openxlsx::setColWidths(
       wbGeneral, sheet = "WOK unique", cols = 1:ncol(inDT.wok), widths = "10" )
     openxlsx::setColWidths(
@@ -155,12 +145,14 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
     openxlsx::addStyle(
       wbGeneral, sheet = "Metadata", style = wrapStyle, rows = 1:nrow(metadata) + 1, cols = 1:2, 
       gridExpand = TRUE )
+    if (nrow(inDT.scopus) > 0) {
     openxlsx::addStyle(
       wbGeneral, sheet = "SCOPUS complete", style = numStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 2:ncol(inDT.scopus), 
       gridExpand = TRUE )
     openxlsx::addStyle(
       wbGeneral, sheet = "SCOPUS complete", style = wrapStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 1:ncol(inDT.scopus), #
       gridExpand = TRUE )
+    }
     openxlsx::addStyle(
       wbGeneral, sheet = "WOK unique", style = numStyle, rows = 1:nrow(inDT.wok) + 1, cols = 2:ncol(inDT.wok), 
       gridExpand = TRUE )
@@ -252,7 +244,7 @@ readinWOK <- function(query) {
     # jData <- as.data.table(flatten(j$Data))
     # jData[, setdiff(names(jData), keepListCol) := NULL]
     # jData[, ] <- lapply(jData[, ], as.character)
-    # queryResults <- rbind(queryResults, jData, fill=TRUE)
+    # queryResults <- rbind(queryResults, jData, fill = TRUE)
     url = paste0('https://api.clarivate.com/api/woslite/query/', QueryID, "/") # get data from the specific query
   }
   
@@ -276,7 +268,7 @@ readinWOK <- function(query) {
     jData[, setdiff(names(jData), keepListCol) := NULL]
     jData[, ] <- lapply(jData[, ], as.character)
     
-    queryResults <- rbind(queryResults, jData, fill=TRUE)
+    queryResults <- rbind(queryResults, jData, fill = TRUE)
     if (nrResults <= firstRecord + count) {
       notFinished = FALSE
       print('Done with WOK')
@@ -286,7 +278,7 @@ readinWOK <- function(query) {
     }
   }
   
-  setnames(queryResults, old = keepListCol, new = newNames, skip_absent=TRUE)
+  setnames(queryResults, old = keepListCol, new = newNames, skip_absent = TRUE)
   return(queryResults)
 }
 
@@ -308,9 +300,9 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   #                            Other.Contributor.ResearcherID.Names=character(), Other.Contributor.ResearcherID.ResearcherIDs=character(),
   #                            Other.Identifier.Eisbn=character(), Other.Identifier.article_no=character(), Other.Identifier.Isbn=character(),
   #                            Other.Identifier.Parent_Book_Doi=character())
-  queryResults <- c(Title.Title=character(), Author.Authors=character(), Author.BookAuthors=character(), Source.SourceTitle=character(),  Source.Pages=character(), 
-                    Source.Volume=character(), Source.Issue=character(), Source.Published.BiblioDate=character(), Source.Published.BiblioYear=character(), 
-                    Other.Identifier.Doi=character(),Other.Identifier.Isbn=character(), Doctype.Doctype=character(), Keyword.Keywords=character())
+  queryResults <- c(Title.Title = character(), Author.Authors = character(), Author.BookAuthors = character(), Source.SourceTitle = character(),  Source.Pages = character(), 
+                    Source.Volume = character(), Source.Issue = character(), Source.Published.BiblioDate = character(), Source.Published.BiblioYear = character(), 
+                    Other.Identifier.Doi = character(),Other.Identifier.Isbn = character(), Doctype.Doctype = character(), Keyword.Keywords = character())
   keepListCol <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
                    "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
                    "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
@@ -340,7 +332,7 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
       jData[, setdiff(names(jData), keepListCol) := NULL]
       jData[, ] <- lapply(jData[, ], as.character)
       
-      queryResults <- rbind(queryResults, jData, fill=TRUE)
+      queryResults <- rbind(queryResults, jData, fill = TRUE)
     }
     if (nrResults <= firstRecord + count) {
       notFinished = FALSE
@@ -351,7 +343,7 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     }
   }
   
-  setnames(queryResults, old = keepListCol, new = newNames, skip_absent=TRUE)
+  setnames(queryResults, old = keepListCol, new = newNames, skip_absent = TRUE)
   queryResults[, eIssn := gsub("-", "", eIssn)]
   queryResults[, keepRef := "y"]
   setcolorder(queryResults, "keepRef")
@@ -360,7 +352,8 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
 
 constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString) {
   query.wok <- sprintf('PY %s AND TS=((%s) AND ((%s)))', yearCoverage.wok, rawQuery, CCSearchString)
-  query.wok <- gsub('"',"'", query.wok )
+  query.wok <- gsub('{','"', query.wok, perl = TRUE)
+  query.wok <- gsub('}','"', query.wok, perl = TRUE)
   return(query.wok)
 }
 
@@ -374,7 +367,7 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
                           QueryID.wok = numeric(),QueryID.scopus = numeric(), nrResults.wok = numeric(), nrResults.scopus = numeric(), query.wok = character(), query.scopus = character())
   url.wok <- 'https://api.clarivate.com/api/woslite/'
   workingText <- "Working on query: "
-  for (i in 1: nrow(queries)) {
+  for (i in 1:nrow(queries)) {
     rawQuery <- queries[i, query]
     query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok, CCSearchString = CCSearchString)
     query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
@@ -392,6 +385,7 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
     # print(paste("nrResults: ", nrResults))
     # if (is.null(QueryID))   print(paste0(i, "th row has QueryID null."))
     nrResults.wok <- j$QueryResult$RecordsFound
+    print(paste0("query.scopus: ", query.scopus))
     response.scopus = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
     nrResults.scopus <- response.scopus$total_results
     QueryID.scopus <- NA
@@ -407,12 +401,11 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
 getScopusinfo <- function(queries, yearCoverage.scopus) {
   queryInfo <- data.table(query = character(), QueryID = numeric(), nrResults = (numeric()))
   workingText <- "Working ."
-  for (i in 1: nrow(queries)) {
+  for (i in 1:nrow(queries)) {
     print(workingText)
     rawQuery <- queries[i, query]
     query <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
     
-    #    print(query.wok)
     response = scopus_search(query = query, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
     nrResults <- response$total_results
     QueryID <- "unknown"
@@ -458,7 +451,7 @@ readinSCOPUS <- function(query) {
     # print("Next")
     # cat(sort(keepListCol.content), "\n")
     # if (!all(str_detect(sort(names(dt.content)),sort(keepListCol.content)))) stop("missing column names")
-    setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames, skip_absent=TRUE)
+    setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames, skip_absent = TRUE)
     dt.authorInfo <- as.data.table(df$author)
     dt.authorInfo[, setdiff(names(dt.authorInfo), keepListCol.author) := NULL]
     
@@ -500,22 +493,22 @@ readinSCOPUS <- function(query) {
           i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x))), .SDcols = searchCols]
           #          print(paste("j ",  j))
         }
-             
+        
         queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]),j, sep = ", ")]
       }
     }
     
-    for (i in searchStrings.names){
+    for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
     }
     queryResults[, (searchStrings.names) := (lapply(.SD, function(x) {
-      sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse=','))
+      sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse = ','))
     })), .SDcols = searchStrings.names]
     
-    for (i in searchStrings.names){
+    for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0("No, "), "", get(i))]
     }
-    for (i in searchStrings.names){
+    for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0(i, ", "), "", get(i))]
     }
     queryResults[, author_keywords := str_replace_all(author_keywords, "\\|, ", "")]
@@ -552,6 +545,7 @@ prepareSpreadsheet <- function(sectionName, queryResults.scopus, query.scopus, q
   DT <- rbind(DT, metadata.recordCount.scopus)
   DT <- rbind(DT, metadata.recordCount.wok)
   DT <- rbind(DT, metadata.searchStringLabel)
+  
   
   for (i in 1:length(searchStrings)) {
     #   newRow <- list(searchStrings.names[i], paste(get(searchStrings[i]), collapse = ", "))
@@ -659,48 +653,60 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
   }
 }
 
-prepareOutput <- function(queryNum, queriestoProcessList, queries) {
-  if (queries[queryNumber %in% queryNum, nrResults.scopus] > 5000) {print(paste0("Number of results for scopus greater than 5000 for query ", i, ". Skipping it."))
-  }else{
-    print(paste0("working on query ", queryNum))
-    rawQuery <- queries[queryNumber %in% queryNum, rawQuery]
-    outFileName <- queries[queryNumber %in% queryNum, fileName]
-    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString) 
-    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString) 
-    QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
-    nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
-    # queryResults.wok <- readinWOK(query = query.wok)
-    queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
-    
-    queryResults.scopus <- readinSCOPUS(query = query.scopus)
-    
-    # process if both results have content
-    if (!nrow(queryResults.scopus) == 0 & (!nrow(queryResults.wok) == 0)) {
-      doi.wok <- sort(queryResults.wok$doi)
-      doi.scopus <- sort(queryResults.scopus$doi)
-      
-      doi.common <- doi.wok[doi.wok %in% doi.scopus]
-      doi.unique.wok <- doi.wok[!doi.wok %in% doi.scopus]
-      doi.unique.scopus <- doi.scopus[!doi.scopus %in% doi.wok]
-      queryResults.wok.unique <- queryResults.wok[!doi %in% doi.common,]
-      
-      # do the same thing with eIssns
-      eissn.wok <- sort(queryResults.wok$eIssn)
-      eissn.scopus <- sort(queryResults.scopus$eIssn)
-      
-      eissn.common <- eissn.wok[eissn.wok %in% eissn.scopus]
-      eissn.unique.wok <- eissn.wok[!eissn.wok %in% eissn.scopus]
-      eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
-      queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
-      
-      prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
-    }
-    if (nrow(queryResults.scopus) == 0 ){
-      print(paste0("SCOPUS results for query ", i, ", query" , query.scopus, " are empty"))
-    }
-    if (nrow(queryResults.wok) == 0 ){
-      print(paste0("WOK results for query ", i, ", query" , query.qok, " are empty"))
-    }
+prepareOutput <- function(queryNum, queries) {
+  print(paste0("working on query ", queryNum))
+  rawQuery <- queries[queryNumber %in% queryNum, rawQuery]
+  outFileName <- queries[queryNumber %in% queryNum, fileName]
+  query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString) 
+  QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
+  nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
+  queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
+  
+  nrResults.scopus <- queries[queryNumber %in% queryNum, nrResults.scopus] # for SCOPUS
+  if (nrResults.scopus > 5000) {
+    print(paste0("Number of results for scopus greater than 5000 for query ", queryNum, ". Skipping it."))
+  } 
+  if (nrResults.scopus == 0) {
+    print(paste0("No results for scopus for query ", queryNum, ". Skipping it."))
+    queryResults.scopus <- data.table(NULL)
   }
   
+  if ((!nrResults.scopus > 5000) & (!nrResults.scopus == 0)) {
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString) 
+    queryResults.scopus <- readinSCOPUS(query = query.scopus)
+  }
+  # process if both results have content
+  if (!nrow(queryResults.scopus) == 0 & (!nrow(queryResults.wok) == 0)) {
+    doi.wok <- sort(queryResults.wok$doi)
+    doi.scopus <- sort(queryResults.scopus$doi)
+    
+    doi.common <- doi.wok[doi.wok %in% doi.scopus]
+    doi.unique.wok <- doi.wok[!doi.wok %in% doi.scopus]
+    doi.unique.scopus <- doi.scopus[!doi.scopus %in% doi.wok]
+    queryResults.wok.unique <- queryResults.wok[!doi %in% doi.common,]
+    
+    # do the same thing with eIssns
+    eissn.wok <- sort(queryResults.wok$eIssn)
+    eissn.scopus <- sort(queryResults.scopus$eIssn)
+    
+    eissn.common <- eissn.wok[eissn.wok %in% eissn.scopus]
+    eissn.unique.wok <- eissn.wok[!eissn.wok %in% eissn.scopus]
+    eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
+    queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
+    
+    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
+  }
+  if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
+    queryResults.wok.unique <-   queryResults.wok
+    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
+  }
+  # these if statements should always be FALSE
+  # if (nrow(queryResults.scopus) == 0 ) {
+  #   print(paste0("SCOPUS results for query ", queryNum, ", query: " , query.scopus, " are empty"))
+  # }
+  # if (nrow(queryResults.wok) == 0 ) {
+  #   print(paste0("WOK results for query ", queryNum, ", query: " , query.wok, " are empty"))
+  # }
 }
+
+

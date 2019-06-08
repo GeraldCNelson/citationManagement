@@ -30,16 +30,16 @@ desc = "SCOPUS and Web of Knowledge Query, QueryId, and number of references for
 cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx", numVal = "0", wrapCols = c(1,4, 9:10))
 
 # assemble queries
-#keep only queries that have more than zero and less than 5000 SCOPUS references
-queries.small <- queryInfo[nrResults.scopus < 5000 & !nrResults.scopus == 0,]
-queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 17
+#keep only queries that have less than 5000 SCOPUS references
+queries.small <- queryInfo[nrResults.scopus < 5000,]
+#queriestoProcessList <- paste0("1:", nrow(queries.small))
+queryNum <- 55
 
 for (i in 1:nrow(queries.small)) {
   queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
-prepareOutput(queryNum = queryNum, queries = queries.small)
+  prepareOutput(queryNum = queryNum, queries = queries.small)
 }
-  
+
 # for (i in 1:queryCount) {
 #   print(paste0("working on query ", i, " of ", queryCount))
 #   queryRowNumber <- queries.small[i, queryNumber]
