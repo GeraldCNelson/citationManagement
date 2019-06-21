@@ -29,11 +29,12 @@ outName <- "queriesInfo.WOKnScopus"
 desc = "SCOPUS and Web of Knowledge Query, QueryId, and number of references for each query in queries.xlsx"
 cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx", numVal = "0", wrapCols = c(1,4, 9:10))
 
+
 # assemble queries
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 55
+queryNum <- 53
 
 for (i in 1:nrow(queries.small)) {
   queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
@@ -90,5 +91,3 @@ doi2bib(dois.combined, file = paste("results/", outFileName, "_", Sys.Date(),".b
 
 # doi2bib(doi.common, file = paste("results/", outFileName, "_scopus.bib"), quiet = TRUE)
 # doi2bib(doi.wok, file = paste("results/", outFileName, "_wok.bib"), quiet = TRUE)
-
-

@@ -29,15 +29,12 @@ CCSearchString <- climateChangeSearchTerms[searchStringName %in% "searchStrings.
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
 searchStrings.countries <- regions_lookup$country_name.ISO
 searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
+
 # other search strings
 searchStringsList <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "searchTerms"))
 countrylist <- list("searchStrings.countries", as.list(searchStrings.countries))
 regionsByIncomeList <- list("searchStrings.regionsByIncome", as.list(searchStrings.regionsByIncome))
 searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
-# next line commented out because no need to have a column for searchStrings.regionsByIncome. It will be empty.
-# searchStringsList <- rbind(searchStringsList, list("searchStrings.regionsByIncome", list(searchStrings.regionsByIncome)))
-searchStrings <- searchStringsList$searchStringName
-searchStrings.names <- gsub("searchStrings.", "", searchStrings)
 
 #' Title cleanupRefFiles - remove old versions and save rds and xlsx or csv versions of the file
 #' @param inDT - name of the data table or frame to be written out
@@ -146,12 +143,12 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
       wbGeneral, sheet = "Metadata", style = wrapStyle, rows = 1:nrow(metadata) + 1, cols = 1:2, 
       gridExpand = TRUE )
     if (nrow(inDT.scopus) > 0) {
-    openxlsx::addStyle(
-      wbGeneral, sheet = "SCOPUS complete", style = numStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 2:ncol(inDT.scopus), 
-      gridExpand = TRUE )
-    openxlsx::addStyle(
-      wbGeneral, sheet = "SCOPUS complete", style = wrapStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 1:ncol(inDT.scopus), #
-      gridExpand = TRUE )
+      openxlsx::addStyle(
+        wbGeneral, sheet = "SCOPUS complete", style = numStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 2:ncol(inDT.scopus), 
+        gridExpand = TRUE )
+      openxlsx::addStyle(
+        wbGeneral, sheet = "SCOPUS complete", style = wrapStyle, rows = 1:nrow(inDT.scopus) + 1, cols = 1:ncol(inDT.scopus), #
+        gridExpand = TRUE )
     }
     openxlsx::addStyle(
       wbGeneral, sheet = "WOK unique", style = numStyle, rows = 1:nrow(inDT.wok) + 1, cols = 2:ncol(inDT.wok), 
@@ -320,10 +317,6 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     Sys.sleep(0.4)
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
-    # QueryID  <- j$QueryResult$QueryID
-    # print(paste0("QueryID: ", QueryID))
-    # print(paste0("firstRecord: ", firstRecord))
-    # print(paste0("nrResults: ", nrResults))
     
     if (!is.data.frame(j$Data)) { # a loop to skip over set of 100 records that has an internal server error
       print(paste("j$Data is not a data frame. Nearest record is ", firstRecord))
@@ -373,17 +366,12 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
     query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
     print(paste( workingText, query.wok))
     
-    #    print(query.wok)
     response.wok <- httr::GET(url.wok, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                               query = list(databaseId = 'WOK', usrQuery = query.wok, count = 1, firstRecord = 1))
-    # stop_for_status(response, task = "bad http status")
     suppressMessages(jsonResp <- content(response.wok, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
     if (!is.null(j$code)) print(paste0("This query is malformed: ", query.wok))
     QueryID.wok  <- j$QueryResult$QueryID
-    # print(paste("QueryID: ", QueryID))
-    # print(paste("nrResults: ", nrResults))
-    # if (is.null(QueryID))   print(paste0(i, "th row has QueryID null."))
     nrResults.wok <- j$QueryResult$RecordsFound
     print(paste0("query.scopus: ", query.scopus))
     response.scopus = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
@@ -411,17 +399,15 @@ getScopusinfo <- function(queries, yearCoverage.scopus) {
     QueryID <- "unknown"
     
     newRow <- list(queries$outFileName[i], queries$queryNumber[i], query.wok, QueryID, nrResults)
-    #    print(paste(query.wok, "; ", QueryID, ";" , nrResults))
-    #    print(newRow)
     queryInfo <- rbind(queryInfo, newRow)
     Sys.sleep(0.4)
     workingText <- paste0(workingText, ".")
   }
-  print("Done!")
+  print("Done getting Scopus info!")
   return(queryInfo)
 }
 
-readinSCOPUS <- function(query) {
+readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   keepListCol.content <- c("dc:title","dc:creator","prism:publicationName", # removed "prism:url","dc:identifier","eid",
                            "prism:eIssn","prism:volume","prism:issueIdentifier","prism:coverDate", "prism:pageRange",
                            "prism:doi","dc:description","citedby-count","prism:aggregationType",
@@ -433,7 +419,18 @@ readinSCOPUS <- function(query) {
   
   keepListCol.author <- c("@seq", "authname", "entry_number")
   
-  searchCols <- c("title", "abstract", "author_keywords", "document_type") # what variables in the reference list should be searched for
+  # rawQuery added here to add a new column to the spreadsheet for its terms
+  rawQueryTerms <- rawQuerySearchTerms(rawQuery)
+  rawQuery.name <- "searchStrings.baseQuery"
+  rawQueryList <- list(rawQuery.name, rawQueryTerms)
+  
+  searchStringsList <- rbindlist(list(searchStringsList[1:3, ], rawQueryList, searchStringsList[4:nrow(searchStringsList), ]))
+  
+  searchStrings <- searchStringsList$searchStringName
+  searchStrings.names <- gsub("searchStrings.", "", searchStrings)
+  
+  # what variables in the reference list should be searched for
+  searchCols <- c("title", "abstract", "author_keywords", "document_type") 
   # create blank queryResuls in case there are 0 results of a search
   queryResults <- data.table(NULL)
   # next few lines used to get totalresults
@@ -447,17 +444,13 @@ readinSCOPUS <- function(query) {
     df <- gen_entries_to_df(response$entries)
     dt.content <- as.data.table(df$df)
     dt.content[, setdiff(names(dt.content), keepListCol.content) := NULL]
-    # cat(sort(names(dt.content)), "\n\n")
-    # print("Next")
-    # cat(sort(keepListCol.content), "\n")
-    # if (!all(str_detect(sort(names(dt.content)),sort(keepListCol.content)))) stop("missing column names")
     setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames, skip_absent = TRUE)
     dt.authorInfo <- as.data.table(df$author)
     dt.authorInfo[, setdiff(names(dt.authorInfo), keepListCol.author) := NULL]
     
     authsList <- data.table(authrs = character())
     for (i in unique(dt.authorInfo$entry_number)) {
-      temp <-dt.authorInfo[entry_number == i, authname]
+      temp <- dt.authorInfo[entry_number == i, authname]
       temp <- as.list(paste(temp, collapse = ", "))
       authsList <- rbind(authsList, temp)
     }
@@ -481,20 +474,23 @@ readinSCOPUS <- function(query) {
     setkey(queryResults)
     
     for (i in 1:length(searchStrings)) {
+      #      print(searchStringsList[,.SD[i]]$searchString)
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
       for (j in searchSt) {
         # grepl and startsWith return a logical vector
-        if (grepl("*", j, fixed = TRUE)) {
-          jnew <-  gsub("*", "", j)
-          #         jnew <- paste0("\\<", jnew)
-          i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) startsWith(x, jnew))), .SDcols = searchCols]
-          #         print(paste("jnew ",  jnew))
-        } else {
-          i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x))), .SDcols = searchCols]
-          #          print(paste("j ",  j))
-        }
+        #       if (grepl("*", j, fixed = TRUE)) {
+        #          j <-  gsub("*", "", j)
+        #          j <- tolower(j)
+        #          i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) {
+        #            grepl(j, x, ignore.case = TRUE, perl = FALSE)
+        #            })), .SDcols = searchCols]
+        # #         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE))), .SDcols = searchCols]
+        #          #         print(paste("jnew ",  jnew))
+        #        } else {
+        i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchCols]
+        #       }
         
-        queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]),j, sep = ", ")]
+        queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]), j , sep = ", ")]
       }
     }
     
@@ -502,7 +498,7 @@ readinSCOPUS <- function(query) {
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
     }
     queryResults[, (searchStrings.names) := (lapply(.SD, function(x) {
-      sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse = ','))
+      sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse = ', '))
     })), .SDcols = searchStrings.names]
     
     for (i in searchStrings.names) {
@@ -511,23 +507,24 @@ readinSCOPUS <- function(query) {
     for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0(i, ", "), "", get(i))]
     }
-    queryResults[, author_keywords := str_replace_all(author_keywords, "\\|, ", "")]
-    queryResults[, author_keywords := str_replace_all(author_keywords, "\\|", ",")]
+    queryResults[, author_keywords := str_replace_all(author_keywords, " \\|, ", " ")]
+    queryResults[, author_keywords := str_replace_all(author_keywords, " \\|", ", ")]
   }
   print('Done with SCOPUS')
   return(queryResults)
 }
 
-prepareSpreadsheet <- function(sectionName, queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName) {
+prepareSpreadsheet <- function(sectionName, rawQuery, queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName) {
   # construct metadata variable
   DT <- data.table(
     searchStringName = character(),
     searchString = character()
   )
   
-  #      variable_name = character(),
-  #   variable_value = character()
-  # )
+  
+  # print(paste("queryResults.scopus names: ", names(queryResults.scopus)))
+  # print(paste("queryResults.wok names: ", names(queryResults.wok)))
+  
   
   metadata.querystring.scopus <- list("SCOPUS query", query.scopus)
   metadata.querystring.wok <- list("WOK query", query.wok)
@@ -535,10 +532,14 @@ prepareSpreadsheet <- function(sectionName, queryResults.scopus, query.scopus, q
   metadata.datestring <- list("Report section", sectionName)
   metadata.recordCount.scopus <- list("SCOPUS reference count", nrow(queryResults.scopus))
   metadata.recordCount.wok <- list("WOK only reference count", nrow(queryResults.wok))
+  rawQueryTerms <- rawQuerySearchTerms(rawQuery)
+  metadata.baseQuery <- list("Base search terms", rawQueryTerms)
+  
   metadata.searchStringLabel <- list("search string names", "search string content, SCOPUS only")
   metadata.notes <- list("See Notes worksheet for more details.", "")
   
   DT <- rbind(DT, metadata.notes) # put here to put the recommendation to read the Notes at the top of the metadata.
+  DT <- rbind(DT, metadata.baseQuery) # put here to put the recommendation to read the Notes at the top of the metadata.
   DT <- rbind(DT, metadata.querystring.scopus)
   DT <- rbind(DT, metadata.querystring.wok)
   DT <- rbind(DT, metadata.datestring)
@@ -673,7 +674,7 @@ prepareOutput <- function(queryNum, queries) {
   
   if ((!nrResults.scopus > 5000) & (!nrResults.scopus == 0)) {
     query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString) 
-    queryResults.scopus <- readinSCOPUS(query = query.scopus)
+    queryResults.scopus <- readinSCOPUS(query = query.scopus, rawQuery, searchStringsList)
   }
   # process if both results have content
   if (!nrow(queryResults.scopus) == 0 & (!nrow(queryResults.wok) == 0)) {
@@ -694,7 +695,7 @@ prepareOutput <- function(queryNum, queries) {
     eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
     queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
     
-    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
+    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
   }
   if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
     queryResults.wok.unique <-   queryResults.wok
@@ -710,3 +711,22 @@ prepareOutput <- function(queryNum, queries) {
 }
 
 
+# function to return raw query search terms
+# rawQuery added here to add a new column to the spreadsheet for its terms
+rawQuerySearchTerms <- function(rawQuery) {
+  rawQuery <- gsub(' AND ', ', ', rawQuery, fixed = TRUE)
+  rawQuery <- gsub(' OR ', ', ', rawQuery, fixed = TRUE)
+  rawQuery <- gsub('(', '', rawQuery, fixed = TRUE)
+  rawQuery <- gsub(')', '', rawQuery, fixed = TRUE)
+  rawQuery <- as.character(strsplit(rawQuery, split = ", ", fixed = TRUE)[[1]])
+  rawQuery <- gsub('{', '', rawQuery, fixed = TRUE)
+  rawQuery <- gsub('}', '', rawQuery, fixed = TRUE)
+  rawQuery <- paste0(rawQuery, '"')
+  rawQuery <- paste0('"', rawQuery)
+  rawQuery <- paste0(rawQuery, collapse = ", ")
+  rawQuery <- paste0("c(", rawQuery)
+  rawQuery <- paste0(rawQuery, ")")
+  rawQuery.name <- "searchStrings.baseQuery"
+  rawQueryList <- list(rawQuery.name, rawQuery)
+  return(rawQuery)
+}
