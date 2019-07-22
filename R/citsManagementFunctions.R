@@ -21,7 +21,6 @@ library(stringr)
 library(doi2bib) #install with install.packages("remotes"); remotes::install_github("wkmor1/doi2bib")
 
 # get list of queries
-queries <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "Queries"))
 climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "CCSearchString"))
 CCSearchString <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChange", searchString]
 
@@ -226,6 +225,13 @@ readinWOK <- function(query) {
                 "volume","issue", "date", "year", 
                 "doi", "eIssn", "document_type", "keywords")
   
+  
+  # response.wok <- httr::GET(url, accept_xml(), httr::add_headers( `X-APIKey` = wosliteKey),
+  #                           query = list(databaseId = 'WOK', usrQuery = query.wok, count = 10, firstRecord = 1))
+  # xmlResp <- content(response.wok, as =  "text")
+  # outdata <- read_xml(response.wok)
+  # nodes<-xml_find_all(response.wok)
+  # 
   # do some testing first and get the ID for this query
   {response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                          query = list(databaseId = 'WOK', usrQuery = query, count = 1, firstRecord = 1))
@@ -257,10 +263,6 @@ readinWOK <- function(query) {
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
     QueryID  <- j$QueryResult$QueryID
-    # print(paste0("QueryID: ", QueryID))
-    # print(paste0("firstRecord: ", firstRecord))
-    # print(paste0("nrResults: ", nrResults))
-    #    print(str(j$Data, max.level = 2))
     jData <- as.data.table(flatten(j$Data))
     jData[, setdiff(names(jData), keepListCol) := NULL]
     jData[, ] <- lapply(jData[, ], as.character)
@@ -474,7 +476,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     setkey(queryResults)
     
     for (i in 1:length(searchStrings)) {
-      #      print(searchStringsList[,.SD[i]]$searchString)
+     #       print(searchStringsList[,.SD[i]]$searchString)
+   #   print(paste0("searchSt i: ", i))
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
       for (j in searchSt) {
         # grepl and startsWith return a logical vector
@@ -514,17 +517,12 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   return(queryResults)
 }
 
-prepareSpreadsheet <- function(sectionName, rawQuery, queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName) {
+prepareSpreadsheet <- function(sectionName, rawQuery, queryResults.scopus, query.scopus, queryResults.wok, query.wok, outName, searchStringsList) {
   # construct metadata variable
   DT <- data.table(
     searchStringName = character(),
     searchString = character()
   )
-  
-  
-  # print(paste("queryResults.scopus names: ", names(queryResults.scopus)))
-  # print(paste("queryResults.wok names: ", names(queryResults.wok)))
-  
   
   metadata.querystring.scopus <- list("SCOPUS query", query.scopus)
   metadata.querystring.wok <- list("WOK query", query.wok)
@@ -533,6 +531,7 @@ prepareSpreadsheet <- function(sectionName, rawQuery, queryResults.scopus, query
   metadata.recordCount.scopus <- list("SCOPUS reference count", nrow(queryResults.scopus))
   metadata.recordCount.wok <- list("WOK only reference count", nrow(queryResults.wok))
   rawQueryTerms <- rawQuerySearchTerms(rawQuery)
+#  print(paste("rawQueryTerms: ", rawQueryTerms))
   metadata.baseQuery <- list("Base search terms", rawQueryTerms)
   
   metadata.searchStringLabel <- list("search string names", "search string content, SCOPUS only")
@@ -547,6 +546,8 @@ prepareSpreadsheet <- function(sectionName, rawQuery, queryResults.scopus, query
   DT <- rbind(DT, metadata.recordCount.wok)
   DT <- rbind(DT, metadata.searchStringLabel)
   
+  searchStrings <- searchStringsList$searchStringName
+  searchStrings.names <- gsub("searchStrings.", "", searchStrings)
   
   for (i in 1:length(searchStrings)) {
     #   newRow <- list(searchStrings.names[i], paste(get(searchStrings[i]), collapse = ", "))
@@ -695,11 +696,11 @@ prepareOutput <- function(queryNum, queries) {
     eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
     queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
     
-    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
+    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
   }
   if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
     queryResults.wok.unique <-   queryResults.wok
-    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName)
+    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
   }
   # these if statements should always be FALSE
   # if (nrow(queryResults.scopus) == 0 ) {
@@ -719,13 +720,15 @@ rawQuerySearchTerms <- function(rawQuery) {
   rawQuery <- gsub('(', '', rawQuery, fixed = TRUE)
   rawQuery <- gsub(')', '', rawQuery, fixed = TRUE)
   rawQuery <- as.character(strsplit(rawQuery, split = ", ", fixed = TRUE)[[1]])
-  rawQuery <- gsub('{', '', rawQuery, fixed = TRUE)
-  rawQuery <- gsub('}', '', rawQuery, fixed = TRUE)
+  rawQuery <- as.list(rawQuery)
+  # rawQuery <- gsub('{', '', rawQuery, fixed = TRUE)
+  # rawQuery <- gsub('}', '', rawQuery, fixed = TRUE)
   rawQuery <- paste0(rawQuery, '"')
   rawQuery <- paste0('"', rawQuery)
   rawQuery <- paste0(rawQuery, collapse = ", ")
   rawQuery <- paste0("c(", rawQuery)
   rawQuery <- paste0(rawQuery, ")")
+  rawQuery <- gsub('\"\"', '\"', rawQuery)
   rawQuery.name <- "searchStrings.baseQuery"
   rawQueryList <- list(rawQuery.name, rawQuery)
   return(rawQuery)
