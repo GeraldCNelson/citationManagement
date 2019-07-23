@@ -715,6 +715,7 @@ prepareOutput <- function(queryNum, queries) {
 # function to return raw query search terms
 # rawQuery added here to add a new column to the spreadsheet for its terms
 rawQuerySearchTerms <- function(rawQuery) {
+  rawQuery <- gsub('  ', ' ', rawQuery, fixed = TRUE)
   rawQuery <- gsub(' AND ', ', ', rawQuery, fixed = TRUE)
   rawQuery <- gsub(' OR ', ', ', rawQuery, fixed = TRUE)
   rawQuery <- gsub('(', '', rawQuery, fixed = TRUE)

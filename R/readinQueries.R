@@ -10,6 +10,9 @@
 # or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
 # for more details at http://www.gnu.org/licenses/.
 source("R/citsManagementFunctions.R")
+chapter <- "wg2_ch05"
+#chapter <- "wg2_ch16"
+queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "Queries"))
 
 # get Scopus api key
 get_api_key(api_key = Sys.getenv('Elsevier_API'))
@@ -25,18 +28,17 @@ yearCoverage.wok <- "= 2014-2019"
 #get info for all the queries in queries from wok database
 queryInfo <- getDBinfo(queries, yearCoverage.wok, yearCoverage.scopus,CCSearchString = CCSearchString)
 inDT <- queryInfo
-outName <- "queriesInfo.WOKnScopus"
+outName <- paste0("queriesInfo.WOKnScopus_", chapter) 
 desc = "SCOPUS and Web of Knowledge Query, QueryId, and number of references for each query in queries.xlsx"
 cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx", numVal = "0", wrapCols = c(1,4, 9:10))
-
 
 # assemble queries
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 53
+queryNum <- 46
 
-for (i in 1:nrow(queries.small)) {
+for (i in 70:nrow(queries.small)) {
   queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
   prepareOutput(queryNum = queryNum, queries = queries.small)
 }
