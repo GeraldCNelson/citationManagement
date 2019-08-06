@@ -18,7 +18,7 @@ library(rscopus)
 library(httr)
 library(jsonlite)
 library(stringr)
-library(doi2bib) #install with install.packages("remotes"); remotes::install_github("wkmor1/doi2bib")
+library(curl)
 
 # get list of queries
 climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "CCSearchString"))
@@ -214,9 +214,9 @@ readinWOK <- function(query) {
   #                            Other.Contributor.ResearcherID.Names=character(), Other.Contributor.ResearcherID.ResearcherIDs=character(),
   #                            Other.Identifier.Eisbn=character(), Other.Identifier.article_no=character(), Other.Identifier.Isbn=character(),
   #                            Other.Identifier.Parent_Book_Doi=character())
-  queryResults <- c(Title.Title=character(), Author.Authors=character(), Author.BookAuthors=character(), Source.SourceTitle=character(),  Source.Pages=character(), 
-                    Source.Volume=character(), Source.Issue=character(), Source.Published.BiblioDate=character(), Source.Published.BiblioYear=character(), 
-                    Other.Identifier.Doi=character(),Other.Identifier.Isbn=character(), Doctype.Doctype=character(), Keyword.Keywords=character())
+  queryResults <- c(Title.Title = character(), Author.Authors = character(), Author.BookAuthors = character(), Source.SourceTitle = character(),  Source.Pages = character(), 
+                    Source.Volume = character(), Source.Issue = character(), Source.Published.BiblioDate = character(), Source.Published.BiblioYear = character(), 
+                    Other.Identifier.Doi = character(),Other.Identifier.Isbn = character(), Doctype.Doctype = character(), Keyword.Keywords = character())
   keepListCol <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
                    "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
                    "Other.Identifier.Doi","Other.Identifier.Eissn", "Doctype.Doctype", "Keyword.Keywords")
@@ -339,6 +339,7 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   }
   
   setnames(queryResults, old = keepListCol, new = newNames, skip_absent = TRUE)
+  if (!"eIssn" %in% names(queryResults)) queryResults[, eIssn := NA] # added July 26 because of a search that didn't return an eIssn column
   queryResults[, eIssn := gsub("-", "", eIssn)]
   queryResults[, keepRef := "y"]
   setcolorder(queryResults, "keepRef")
@@ -361,12 +362,14 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
   queryInfo <- data.table(sectionName = character(),fileName = character(), queryNumber = character(), rawQuery = character(), 
                           QueryID.wok = numeric(),QueryID.scopus = numeric(), nrResults.wok = numeric(), nrResults.scopus = numeric(), query.wok = character(), query.scopus = character())
   url.wok <- 'https://api.clarivate.com/api/woslite/'
-  workingText <- "Working on query: "
-  for (i in 1:nrow(queries)) {
-    rawQuery <- queries[i, query]
+  workingText <- "Working on query"
+#  for (i in 8:10) {
+    for (i in 1:(nrow(queries))) {
+      rawQuery <- queries[i, query]
     query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok, CCSearchString = CCSearchString)
     query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
-    print(paste( workingText, query.wok))
+    print(paste( workingText, queries$queryNumber[i], ": output name:", queries$outFileName[i]))
+    print(paste0("query.wok: ", query.wok))
     
     response.wok <- httr::GET(url.wok, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                               query = list(databaseId = 'WOK', usrQuery = query.wok, count = 1, firstRecord = 1))
@@ -376,7 +379,7 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
     QueryID.wok  <- j$QueryResult$QueryID
     nrResults.wok <- j$QueryResult$RecordsFound
     print(paste0("query.scopus: ", query.scopus))
-    response.scopus = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
+    response.scopus = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "STANDARD"))
     nrResults.scopus <- response.scopus$total_results
     QueryID.scopus <- NA
     
@@ -426,13 +429,14 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   rawQuery.name <- "searchStrings.baseQuery"
   rawQueryList <- list(rawQuery.name, rawQueryTerms)
   
-  searchStringsList <- rbindlist(list(searchStringsList[1:3, ], rawQueryList, searchStringsList[4:nrow(searchStringsList), ]))
+  # this is where the rawQuery is put into the filter column order
+  searchStringsList <- rbindlist(list(searchStringsList[1:2, ], rawQueryList, searchStringsList[3:nrow(searchStringsList), ]))
   
   searchStrings <- searchStringsList$searchStringName
   searchStrings.names <- gsub("searchStrings.", "", searchStrings)
   
   # what variables in the reference list should be searched for
-  searchCols <- c("title", "abstract", "author_keywords", "document_type") 
+  searchCols <- c("title", "abstract", "author_keywords") # removed , "document_type" Aug 1, 2019
   # create blank queryResuls in case there are 0 results of a search
   queryResults <- data.table(NULL)
   # next few lines used to get totalresults
@@ -464,7 +468,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     }
     
     # new columns with no search strings. Used for manual entry of information
-    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system",  "resid_damage", "comments")
+#    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system",  "resid_damage", "comments") - initial version
+    colsWithNoSearchStrings <- c("comments")
     # default values
     for (i in colsWithNoSearchStrings) {
       queryResults[, (i) := "None"]
@@ -472,9 +477,13 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     queryResults[, keepRef := "y"]
     setcolorder(queryResults, "keepRef")
     queryResults[, notPeerRev := "No"]
-    
     setkey(queryResults)
     
+    # remove non-peer reviewed reference types
+    nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article")
+    queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
+    print(unique(queryResults$document_type))
+#    print(paste0("searchStrings.names: ", searchStrings.names))
     for (i in 1:length(searchStrings)) {
      #       print(searchStringsList[,.SD[i]]$searchString)
    #   print(paste0("searchSt i: ", i))
@@ -513,6 +522,13 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     queryResults[, author_keywords := str_replace_all(author_keywords, " \\|, ", " ")]
     queryResults[, author_keywords := str_replace_all(author_keywords, " \\|", ", ")]
   }
+  # set scopus column name order here to make sure all queries have the same column order
+  # column names that should be in all scopus refs
+  scopusColNames <- c("title", "firstAuthor", "publicationName", "eIssn", "volume", "issue",         
+                      "date", "doi", "abstract", "citations", "pubType", "document_type", "pageRange",      
+                      "author_keywords")
+  filterColumns <- names(queryResults)[!names(queryResults) %in% c("keepRef", "comments", scopusColNames)]
+  setcolorder(queryResults, c("keepRef", scopusColNames, filterColumns, "comments"))
   print('Done with SCOPUS')
   return(queryResults)
 }
@@ -656,9 +672,9 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
 }
 
 prepareOutput <- function(queryNum, queries) {
-  print(paste0("working on query ", queryNum))
   rawQuery <- queries[queryNumber %in% queryNum, rawQuery]
   outFileName <- queries[queryNumber %in% queryNum, fileName]
+  print(paste0("working on query ", queryNum, "filename: ", outFileName))
   query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString) 
   QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
   nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
@@ -734,3 +750,52 @@ rawQuerySearchTerms <- function(rawQuery) {
   rawQueryList <- list(rawQuery.name, rawQuery)
   return(rawQuery)
 }
+
+createBibtexfile <- function(url, outputFileName) {
+  # code originally from https://stackoverflow.com/questions/12193779/how-to-write-trycatch-in-r
+  out <- tryCatch(
+    {
+      # Just to highlight: if you want to use more than one 
+      # R expression in the "try" part then you'll have to 
+      # use curly brackets.
+      # 'tryCatch()' will return the last evaluated expression 
+      # in case the "try" part was completed successfully
+      
+#      message("This is the 'try' part")
+      
+      # readLines(con=url, warn=FALSE) 
+      curl_download(url, destfile = outputFileName, handle = h, mode = "a", quiet = TRUE)
+      # The return value of `readLines()` is the actual value 
+      # that will be returned in case there is no condition 
+      # (e.g. warning or error). 
+      # You don't need to state the return value via `return()` as code 
+      # in the "try" part is not wrapped insided a function (unlike that
+      # for the condition handlers for warnings and error below)
+    },
+    error = function(cond) {
+      # message(paste("URL does not seem to exist:", url))
+      # message("Here's the original error message:")
+      # message(cond)
+      # Choose a return value in case of error
+      return("Rejected")
+    },
+    warning = function(cond) {
+      message(paste("URL caused a warning:", url))
+      message("Here's the original warning message:")
+      message(cond)
+      # Choose a return value in case of warning
+      return(NULL)
+    },
+    finally = {
+      # NOTE:
+      # Here goes everything that should be executed at the end,
+      # regardless of success or error.
+      # If you want more than one expression to be executed, then you 
+      # need to wrap them in curly brackets ({...}); otherwise you could
+      # just have written 'finally=<expression>' 
+      message(paste("Processed URL:", url))
+    }
+  )    
+  return(out)
+}
+
