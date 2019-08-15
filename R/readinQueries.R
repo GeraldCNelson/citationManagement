@@ -12,7 +12,7 @@
 source("R/citsManagementFunctions.R")
 chapter <- "wg2_ch05"
 #chapter <- "wg2_ch16"
-queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "Queries"))
+queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "baseQueries"))
 
 # get Scopus api key
 get_api_key(api_key = Sys.getenv('Elsevier_API'))
@@ -25,6 +25,10 @@ wosliteKey <- Sys.getenv("wosliteKey")
 yearCoverage.scopus <- "> 2013"
 yearCoverage.wok <- "= 2014-2019"
 
+if (!nrow(queries) == max(queries$queryNumber)) {
+  stop("Query numbers probably need to be updated.")
+}
+
 #get info for all the queries in queries from wok database
 queryInfo <- getDBinfo(queries, yearCoverage.wok, yearCoverage.scopus,CCSearchString = CCSearchString)
 inDT <- queryInfo
@@ -36,11 +40,11 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 26
+queryNum <- 27
 
-for (i in 17:19) {
+#for (i in 17:19) {
   #for (i in as.numeric(missingQueries)) {
-#for (i in 1:nrow(queries.small)) {
+for (i in 81:nrow(queries.small)) {
      queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
   prepareOutput(queryNum = queryNum, queries = queries.small)
 }

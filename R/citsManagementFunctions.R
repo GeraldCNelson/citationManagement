@@ -19,10 +19,20 @@ library(httr)
 library(jsonlite)
 library(stringr)
 library(curl)
+library(textclean)
 
 # get list of queries
-climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "CCSearchString"))
-CCSearchString <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChange", searchString]
+climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "CCSearchStrings"))
+
+# construct the climate change search string here
+climateChangeSource <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChangeSource", searchString]
+climateImpacts <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateImpacts", searchString]
+climateMitigation <- climateChangeSearchTerms[searchStringName %in% "searchStrings.mitigation", searchString]
+# CCSearchString <- paste0("(", climateChangeSource, ") OR (", climateImpacts, ") AND NOT (", climateMitigation, ")")
+CCSearchString <- paste0("(", climateChangeSource, ") AND NOT (", climateMitigation, ")")
+
+#CCSearchString <- climateChangeSource
+#CCSearchString <- gsub("\\\\", "", CCSearchString)
 
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
@@ -30,7 +40,7 @@ searchStrings.countries <- regions_lookup$country_name.ISO
 searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
 
 # other search strings
-searchStringsList <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "searchTerms"))
+searchStringsList <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "filterTerms"))
 countrylist <- list("searchStrings.countries", as.list(searchStrings.countries))
 regionsByIncomeList <- list("searchStrings.regionsByIncome", as.list(searchStrings.regionsByIncome))
 searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
@@ -198,6 +208,7 @@ removeOldVersions <- function(fileShortName,dir) {
 
 # readin WOK function
 readinWOK <- function(query) {
+  query <- gsub("\\\\", "", query)
   firstRecord <- 1
   nrResults <- -1
   queryID = 1
@@ -233,6 +244,7 @@ readinWOK <- function(query) {
   # nodes<-xml_find_all(response.wok)
   # 
   # do some testing first and get the ID for this query
+  
   {response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                          query = list(databaseId = 'WOK', usrQuery = query, count = 1, firstRecord = 1))
     stop_for_status(response, task = "bad http status")
@@ -283,6 +295,7 @@ readinWOK <- function(query) {
 
 # readin WOK function using a queryID
 readinWOKWithQueryID <- function(query, QueryID, nrResults) {
+  query <- gsub("\\\\", "", query)
   firstRecord <- 1
   # nrResults <- -1
   #  queryID = 1
@@ -350,11 +363,14 @@ constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString) {
   query.wok <- sprintf('PY %s AND TS=((%s) AND ((%s)))', yearCoverage.wok, rawQuery, CCSearchString)
   query.wok <- gsub('{','"', query.wok, perl = TRUE)
   query.wok <- gsub('}','"', query.wok, perl = TRUE)
+  query.wok <- replace_curly_quote(query.wok)
+  query.wok <- gsub("AND NOT", "NOT", query.wok)
   return(query.wok)
 }
 
 constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString) {
   query.scopus <- sprintf('PUBYEAR %s AND TITLE-ABS-KEY((%s) AND ((%s)))', yearCoverage.scopus, rawQuery,  CCSearchString)
+  query.scopus <- replace_curly_quote(query.scopus)
   return(query.scopus)
 }
 
@@ -363,10 +379,11 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
                           QueryID.wok = numeric(),QueryID.scopus = numeric(), nrResults.wok = numeric(), nrResults.scopus = numeric(), query.wok = character(), query.scopus = character())
   url.wok <- 'https://api.clarivate.com/api/woslite/'
   workingText <- "Working on query"
-#  for (i in 8:10) {
-    for (i in 1:(nrow(queries))) {
-      rawQuery <- queries[i, query]
+  for (i in 1:(nrow(queries))) {
+    rawQuery <- queries[i, query]
     query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok, CCSearchString = CCSearchString)
+    query.wok <- gsub("AND NOT", "NOT", query.wok)
+    
     query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
     print(paste( workingText, queries$queryNumber[i], ": output name:", queries$outFileName[i]))
     print(paste0("query.wok: ", query.wok))
@@ -433,6 +450,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   searchStringsList <- rbindlist(list(searchStringsList[1:2, ], rawQueryList, searchStringsList[3:nrow(searchStringsList), ]))
   
   searchStrings <- searchStringsList$searchStringName
+  searchStrings <- replace_curly_quote(searchStrings)
   searchStrings.names <- gsub("searchStrings.", "", searchStrings)
   
   # what variables in the reference list should be searched for
@@ -440,6 +458,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   # create blank queryResuls in case there are 0 results of a search
   queryResults <- data.table(NULL)
   # next few lines used to get totalresults
+  query <- gsub("\\\\", "", query)
   response = scopus_search(query = query, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
   nrResults <- response$total_results
   if (nrResults > 5000) stop("Number of SCOPUS records greater than 5000")
@@ -468,7 +487,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     }
     
     # new columns with no search strings. Used for manual entry of information
-#    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system",  "resid_damage", "comments") - initial version
+    #    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system",  "resid_damage", "comments") - initial version
     colsWithNoSearchStrings <- c("comments")
     # default values
     for (i in colsWithNoSearchStrings) {
@@ -480,14 +499,16 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     setkey(queryResults)
     
     # remove non-peer reviewed reference types
-    nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article")
+    nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
     queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
     print(unique(queryResults$document_type))
-#    print(paste0("searchStrings.names: ", searchStrings.names))
+    #    print(paste0("searchStrings.names: ", searchStrings.names))
     for (i in 1:length(searchStrings)) {
-     #       print(searchStringsList[,.SD[i]]$searchString)
-   #   print(paste0("searchSt i: ", i))
+      #       print(searchStringsList[,.SD[i]]$searchString)
+      #   print(paste0("searchSt i: ", i))
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
+      searchSt <- replace_curly_quote(searchSt)
+      
       for (j in searchSt) {
         # grepl and startsWith return a logical vector
         #       if (grepl("*", j, fixed = TRUE)) {
@@ -547,7 +568,7 @@ prepareSpreadsheet <- function(sectionName, rawQuery, queryResults.scopus, query
   metadata.recordCount.scopus <- list("SCOPUS reference count", nrow(queryResults.scopus))
   metadata.recordCount.wok <- list("WOK only reference count", nrow(queryResults.wok))
   rawQueryTerms <- rawQuerySearchTerms(rawQuery)
-#  print(paste("rawQueryTerms: ", rawQueryTerms))
+  #  print(paste("rawQueryTerms: ", rawQueryTerms))
   metadata.baseQuery <- list("Base search terms", rawQueryTerms)
   
   metadata.searchStringLabel <- list("search string names", "search string content, SCOPUS only")
@@ -673,9 +694,11 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
 
 prepareOutput <- function(queryNum, queries) {
   rawQuery <- queries[queryNumber %in% queryNum, rawQuery]
+  rawQuery <- gsub("\\\\", "", rawQuery)
   outFileName <- queries[queryNumber %in% queryNum, fileName]
-  print(paste0("working on query ", queryNum, "filename: ", outFileName))
+  print(paste0("working on query ", queryNum, " filename: ", outFileName))
   query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString) 
+  query.wok <- gsub("AND NOT", "NOT", query.wok)
   QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
   nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
   queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
@@ -690,7 +713,10 @@ prepareOutput <- function(queryNum, queries) {
   }
   
   if ((!nrResults.scopus > 5000) & (!nrResults.scopus == 0)) {
-    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString) 
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString)
+    replace_curly_quote(query.scopus)
+    
+    query.scopus <- gsub("\\\\", "", query.scopus)
     queryResults.scopus <- readinSCOPUS(query = query.scopus, rawQuery, searchStringsList)
   }
   # process if both results have content
@@ -716,6 +742,8 @@ prepareOutput <- function(queryNum, queries) {
   }
   if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
     queryResults.wok.unique <-   queryResults.wok
+    nonPeerReviewed.wok <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
+    queryResults.wok.unique[!document_type %in% nonPeerReviewed.wok, ]
     prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
   }
   # these if statements should always be FALSE
@@ -761,7 +789,7 @@ createBibtexfile <- function(url, outputFileName) {
       # 'tryCatch()' will return the last evaluated expression 
       # in case the "try" part was completed successfully
       
-#      message("This is the 'try' part")
+      #      message("This is the 'try' part")
       
       # readLines(con=url, warn=FALSE) 
       curl_download(url, destfile = outputFileName, handle = h, mode = "a", quiet = TRUE)
