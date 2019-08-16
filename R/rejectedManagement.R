@@ -14,7 +14,10 @@ rejectedPath.in <- "data/rejected/rejected_in/"
 rejectedPath.out <- "data/rejected/rejected_out/"
 
 rejectfilesToProcess <- list.files(rejectedPath.in)
+rejectfilesOut <- list.files(rejectedPath.out)
 rejectfilesToProcess <- grep("xlsx", rejectfilesToProcess, value = TRUE)
+rejectfilesOld <- grep("xlsx", rejectfilesToProcess, value = TRUE)
+
 
 for (i in rejectfilesToProcess) {
   fileComponents <- strsplit(i, split = "_")
@@ -22,13 +25,17 @@ for (i in rejectfilesToProcess) {
   queryDate <- fileComponents[[1]][[2]]
   rejectAuthor <- gsub(".xlsx", "", fileComponents[[1]][[3]])
   dt <- paste0(rejectedPath.in, i)
-  dt <- as.data.table(read_excel(dt, sheet = "SCOPUS complete"))
-  dt_reject <- dt[keepRef %in% c("N", "n"),]
-  outFileName <- paste0(rejectedPath.out, queryName, queryDate, rejectAuthor, )
+  dt.scopus <- as.data.table(read_excel(dt, sheet = "SCOPUS complete"))
+  dt.wok <- as.data.table(read_excel(dt, sheet = "WOK unique"))
+  dt_reject_scopus <- dt.scopus[keepRef %in% c("N", "n"),]
+  dt_reject_wok <- dt.wok[keepRef %in% c("N", "n"),]
+  dt_keep_scopus <- dt.scopus[!keepRef %in% c("N", "n"),]
+  dt_keep_wok <- dt.wok[!keepRef %in% c("N", "n"),]
+  
+  outFileName <- paste0(queryName, queryDate, rejectAuthor, )
   assign()
 }
 
-rejectFile <- "SSP_RCPs_2019-08-11_DD.xlsx"
 chapter <- "wg2_ch05"
 queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "Queries"))
 outputName <- "pestsCrops"
