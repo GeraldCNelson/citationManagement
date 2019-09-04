@@ -15,46 +15,75 @@ rejectedPath.out <- "data/rejected/rejected_out/"
 
 rejectfilesToProcess <- list.files(rejectedPath.in)
 rejectfilesOut <- list.files(rejectedPath.out)
-rejectfilesToProcess <- grep("xlsx", rejectfilesToProcess, value = TRUE)
-rejectfilesOld <- grep("xlsx", rejectfilesToProcess, value = TRUE)
 
+# keep only xlsx files
+rejectfilesToProcess <- grep("xlsx", rejectfilesToProcess, value = TRUE)
+
+# get the list of xlsx files that already exist in the out folder
+rejectfilesOld <- grep("xlsx", rejectfilesOut, value = TRUE)
+
+# first open up previous list of rejected and accepted files for this query or create it
+if ("dt_reject_list.csv" %in% rejectfilesOut) {
+  dt_reject_list <- as.data.table(read_csv("dt_reject_list.csv"))
+}else{
+  dt_reject_list <- data.table(queryName = character(), rejectTitle = character(), rejectDoi = character(),
+                               rejectAuthor = character(), rejectDate = character(), query_scopus = character(), query_wok = character())
+}
 
 for (i in rejectfilesToProcess) {
   fileComponents <- strsplit(i, split = "_")
   queryName <- fileComponents[[1]][[1]]
   queryDate <- fileComponents[[1]][[2]]
   rejectAuthor <- gsub(".xlsx", "", fileComponents[[1]][[3]])
+  rejectedfileName_scopus <- paste0(queryName, "_rejected_master_scopus.xlsx")
+  rejectedfileName_wok <- paste0(queryName, "_rejected_master_wok.xlsx")
+  
+  
+  # now read in the information for this query for scopus and wok sheets
   dt <- paste0(rejectedPath.in, i)
   dt.scopus <- as.data.table(read_excel(dt, sheet = "SCOPUS complete"))
   dt.wok <- as.data.table(read_excel(dt, sheet = "WOK unique"))
+  dt.metadata <- as.data.table(read_excel(dt, sheet = "Metadata"))
+  
+  # extract references that have been rejected and get unique identifier, currently the title.
   dt_reject_scopus <- dt.scopus[keepRef %in% c("N", "n"),]
+  query_scopus <- dt.metadata[3, searchString]
+  query_wok <- dt.metadata[4, searchString]
+  reject.title.scopus <- dt_reject_scopus$title
+  reject.doi.scopus <- dt_reject_scopus$doi
   dt_reject_wok <- dt.wok[keepRef %in% c("N", "n"),]
+  reject.title.wok <- dt_reject_wok$title
+  reject.doi.wok <- dt_reject_wok$doi
+  dt <- data.table(
+    rejectTitle = c(reject.title.scopus, reject.title.wok),
+    rejectDoi = c(reject.doi.scopus, reject.doi.wok), query_scopus = query_scopus, query_wok = query_scopus)
+    dt[, rejectAuthor := rejectAuthor][, rejectDate := queryDate][
+      , queryName := queryName]
+  dt_reject_list <- rbind(dt_reject_list, dt)
+  
+  # get references to keep for scopus and wok
   dt_keep_scopus <- dt.scopus[!keepRef %in% c("N", "n"),]
   dt_keep_wok <- dt.wok[!keepRef %in% c("N", "n"),]
-  
-  outFileName <- paste0(queryName, queryDate, rejectAuthor, )
-  assign()
 }
 
-chapter <- "wg2_ch05"
-queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "Queries"))
-outputName <- "pestsCrops"
-reviewer <- queries[outFileName %in% outputName, reviewer]
-reviewer <- "RBK"
-reviewer <- "DD"
-nameCombo <- paste(outputName, reviewer, sep = "_")
-rejectedPath <- "data/rejected/"
-emptyPathNname <- paste0(rejectedPath, nameCombo)
-fileList <- list.files(rejectedPath)
-# get just the names of the files that end in xlsx
-dt <- as.data.table(read_excel("data/rejected/pestsCrops_2019-07-31-rbk.xlsx", 
-                               sheet = "SCOPUS complete"))
-dt <- dt[keepRef %in% c("N", "n"),]
-dt_doi <- dt$doi
-dt_doiEmpty <- dt[is.na(doi),]
-dt_doi <- dt_doi[!is.na(dt_doi)]
-write.xlsx(dt_doiEmpty, file = paste0(emptyPathNname, ".xlsx"))
-write.csv(dt_doi, file = paste0(emptyPathNname, ".csv"))
+dt_reject_list <- unique(dt_reject_list)
+outFileName <- paste0(rejectedPath.out, "rejectList_master", ".xlsx")
+# write_csv(dt_reject_list, outFileName)  
+
+wbGeneral <- openxlsx::createWorkbook()
+longName <- outFileName
+outName <- strtrim(outFileName, c(31))
+
+# first add the needed worksheets
+openxlsx::addWorksheet(wb = wbGeneral, sheetName = "Rejected Refs")
+openxlsx::writeDataTable(
+  wbGeneral,
+  dt_reject_list,  sheet = "Rejected Refs", startRow = 1, startCol = 1, rowNames = FALSE,
+  colNames = TRUE, withFilter = TRUE)
+openxlsx::setColWidths(
+  wbGeneral, sheet = "Rejected Refs", cols = 1:5 , widths = c(20, 70, 30, 15, 15))
+openxlsx::saveWorkbook(wbGeneral, outFileName, overwrite = TRUE)
+
 
 h <- new_handle()
 handle_setheaders(h, "accept" = "application/x-bibtex")

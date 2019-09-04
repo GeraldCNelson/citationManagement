@@ -24,14 +24,17 @@ library(textclean)
 # get list of queries
 climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "CCSearchStrings"))
 
+# get list of rejected references
+rejectList_master <- as.data.table(read.xlsx("data/rejected/rejected_out/rejectList_master.xlsx"))
+
 # construct the climate change search string here
 climateChangeSource <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChangeSource", searchString]
 climateImpacts <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateImpacts", searchString]
 climateMitigation <- climateChangeSearchTerms[searchStringName %in% "searchStrings.mitigation", searchString]
 # CCSearchString <- paste0("(", climateChangeSource, ") OR (", climateImpacts, ") AND NOT (", climateMitigation, ")")
-CCSearchString <- paste0("(", climateChangeSource, ") AND NOT (", climateMitigation, ")")
+# CCSearchString <- paste0("(", climateChangeSource, ") AND NOT (", climateMitigation, ")")
 
-#CCSearchString <- climateChangeSource
+CCSearchString <- climateChangeSource
 #CCSearchString <- gsub("\\\\", "", CCSearchString)
 
 # get country names
@@ -359,17 +362,17 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   return(queryResults)
 }
 
-constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString) {
-  query.wok <- sprintf('PY %s AND TS=((%s) AND ((%s)))', yearCoverage.wok, rawQuery, CCSearchString)
+constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString, climateMitigation) {
+  query.wok <- sprintf('PY %s AND TS=((%s) AND ((%s)) NOT ((%s)))', yearCoverage.wok, rawQuery, CCSearchString, climateMitigation)
   query.wok <- gsub('{','"', query.wok, perl = TRUE)
   query.wok <- gsub('}','"', query.wok, perl = TRUE)
   query.wok <- replace_curly_quote(query.wok)
-  query.wok <- gsub("AND NOT", "NOT", query.wok)
+  #  query.wok <- gsub("AND NOT", "NOT", query.wok)
   return(query.wok)
 }
 
-constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString) {
-  query.scopus <- sprintf('PUBYEAR %s AND TITLE-ABS-KEY((%s) AND ((%s)))', yearCoverage.scopus, rawQuery,  CCSearchString)
+constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString, climateMitigation) {
+  query.scopus <- sprintf('PUBYEAR %s AND TITLE-ABS-KEY((%s) AND ((%s)) AND NOT (%s))', yearCoverage.scopus, rawQuery,  CCSearchString, climateMitigation)
   query.scopus <- replace_curly_quote(query.scopus)
   return(query.scopus)
 }
@@ -381,10 +384,10 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
   workingText <- "Working on query"
   for (i in 1:(nrow(queries))) {
     rawQuery <- queries[i, query]
-    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok, CCSearchString = CCSearchString)
+    query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok, CCSearchString = CCSearchString, climateMitigation)
     query.wok <- gsub("AND NOT", "NOT", query.wok)
     
-    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString, climateMitigation)
     print(paste( workingText, queries$queryNumber[i], ": output name:", queries$outFileName[i]))
     print(paste0("query.wok: ", query.wok))
     
@@ -504,8 +507,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     print(unique(queryResults$document_type))
     #    print(paste0("searchStrings.names: ", searchStrings.names))
     for (i in 1:length(searchStrings)) {
-      #       print(searchStringsList[,.SD[i]]$searchString)
-      #   print(paste0("searchSt i: ", i))
+         #     print(searchStringsList[,.SD[i]]$searchString)
+         # print(paste0("searchSt i: ", i))
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
       searchSt <- replace_curly_quote(searchSt)
       
@@ -692,12 +695,12 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
   }
 }
 
-prepareOutput <- function(queryNum, queries) {
+prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigation) {
   rawQuery <- queries[queryNumber %in% queryNum, rawQuery]
   rawQuery <- gsub("\\\\", "", rawQuery)
   outFileName <- queries[queryNumber %in% queryNum, fileName]
   print(paste0("working on query ", queryNum, " filename: ", outFileName))
-  query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString) 
+  query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString, climateMitigation) 
   query.wok <- gsub("AND NOT", "NOT", query.wok)
   QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
   nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
@@ -713,11 +716,13 @@ prepareOutput <- function(queryNum, queries) {
   }
   
   if ((!nrResults.scopus > 5000) & (!nrResults.scopus == 0)) {
-    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString)
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString, climateMitigation)
     replace_curly_quote(query.scopus)
     
     query.scopus <- gsub("\\\\", "", query.scopus)
     queryResults.scopus <- readinSCOPUS(query = query.scopus, rawQuery, searchStringsList)
+    temp <- rejectList_master[queryName %in% outFileName,]
+    queryResults.scopus <- queryResults.scopus[!title %in% temp$rejectTitle,]
   }
   # process if both results have content
   if (!nrow(queryResults.scopus) == 0 & (!nrow(queryResults.wok) == 0)) {
@@ -737,6 +742,8 @@ prepareOutput <- function(queryNum, queries) {
     eissn.unique.wok <- eissn.wok[!eissn.wok %in% eissn.scopus]
     eissn.unique.scopus <- eissn.scopus[!eissn.scopus %in% eissn.wok]
     queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
+    temp <- rejectList_master[queryName %in% outFileName,]
+    queryResults.wok.unique <- queryResults.wok.unique[!title %in% temp$rejectTitle,]
     
     prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
   }
@@ -762,6 +769,7 @@ rawQuerySearchTerms <- function(rawQuery) {
   rawQuery <- gsub('  ', ' ', rawQuery, fixed = TRUE)
   rawQuery <- gsub(' AND ', ', ', rawQuery, fixed = TRUE)
   rawQuery <- gsub(' OR ', ', ', rawQuery, fixed = TRUE)
+  rawQuery <- gsub(' or ', ', ', rawQuery, fixed = TRUE) # added because somewhere an OR is being converted to or and I don't want to figure out where.
   rawQuery <- gsub('(', '', rawQuery, fixed = TRUE)
   rawQuery <- gsub(')', '', rawQuery, fixed = TRUE)
   rawQuery <- as.character(strsplit(rawQuery, split = ", ", fixed = TRUE)[[1]])
