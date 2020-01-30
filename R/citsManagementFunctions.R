@@ -504,12 +504,13 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     # remove non-peer reviewed reference types
     nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
     queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
-    print(unique(queryResults$document_type))
+#    print(unique(queryResults$document_type))
     #    print(paste0("searchStrings.names: ", searchStrings.names))
     for (i in 1:length(searchStrings)) {
-         #     print(searchStringsList[,.SD[i]]$searchString)
-         # print(paste0("searchSt i: ", i))
+      #     print(searchStringsList[,.SD[i]]$searchString)
+#       print(searchStringsList[,.SD[i]]$searchString)
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
+      
       searchSt <- replace_curly_quote(searchSt)
       
       for (j in searchSt) {
@@ -533,6 +534,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
     }
+    print(sort(names(queryResults)))
+    print(sort(searchStrings.names))
     queryResults[, (searchStrings.names) := (lapply(.SD, function(x) {
       sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse = ', '))
     })), .SDcols = searchStrings.names]
@@ -571,7 +574,6 @@ prepareSpreadsheet <- function(sectionName, rawQuery, queryResults.scopus, query
   metadata.recordCount.scopus <- list("SCOPUS reference count", nrow(queryResults.scopus))
   metadata.recordCount.wok <- list("WOK only reference count", nrow(queryResults.wok))
   rawQueryTerms <- rawQuerySearchTerms(rawQuery)
-  #  print(paste("rawQueryTerms: ", rawQueryTerms))
   metadata.baseQuery <- list("Base search terms", rawQueryTerms)
   
   metadata.searchStringLabel <- list("search string names", "search string content, SCOPUS only")
@@ -705,6 +707,7 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
   nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
   queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
+  print(paste0("queryResults.wok count: ", nrow(queryResults.wok)))
   
   nrResults.scopus <- queries[queryNumber %in% queryNum, nrResults.scopus] # for SCOPUS
   if (nrResults.scopus > 5000) {
@@ -727,6 +730,7 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   # process if both results have content
   if (!nrow(queryResults.scopus) == 0 & (!nrow(queryResults.wok) == 0)) {
     doi.wok <- sort(queryResults.wok$doi)
+    print(paste0("doi.wok count: ", length(doi.wok))) # doi.wok is a character variable
     doi.scopus <- sort(queryResults.scopus$doi)
     
     doi.common <- doi.wok[doi.wok %in% doi.scopus]

@@ -23,7 +23,7 @@ wosliteKey <- Sys.getenv("wosliteKey")
 
 # year range
 yearCoverage.scopus <- "> 2013"
-yearCoverage.wok <- "= 2014-2019"
+yearCoverage.wok <- "= 2014-2020"
 
 if (!nrow(queries) == max(queries$queryNumber)) {
   stop("Query numbers probably need to be updated.")
@@ -40,12 +40,13 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 90
+#queryNum <- 6
 
 #for (i in c(20, 22, 39, 44)) {
   #for (i in as.numeric(missingQueries)) {
-  for (i in 83:nrow(queries.small)) {
-  queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
+#  for (i in 82:nrow(queries.small)) {
+    for (i in 97) {
+      queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
   prepareOutput(queryNum = queryNum, queries = queries.small, rejectList_master, climateMitigation)
 }
 
@@ -94,7 +95,7 @@ queryNum <- 90
 #   }
 # }
 
-idois.combined <- unique(c(doi.wok, doi.scopus))
+dois.combined <- unique(c(doi.wok, doi.scopus))
 doi2bib(dois.combined, file = paste("results/", outFileName, "_", Sys.Date(),".bib"), quiet = TRUE)
 
 # doi2bib(doi.common, file = paste("results/", outFileName, "_scopus.bib"), quiet = TRUE)
