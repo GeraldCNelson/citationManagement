@@ -20,6 +20,9 @@ library(jsonlite)
 library(stringr)
 library(curl)
 library(textclean)
+library(doi2bib)
+library(dplyr)
+library(purrr)
 
 # get list of queries
 climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "CCSearchStrings"))
@@ -318,9 +321,12 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   queryResults <- c(Title.Title = character(), Author.Authors = character(), Author.BookAuthors = character(), Source.SourceTitle = character(),  Source.Pages = character(), 
                     Source.Volume = character(), Source.Issue = character(), Source.Published.BiblioDate = character(), Source.Published.BiblioYear = character(), 
                     Other.Identifier.Doi = character(),Other.Identifier.Isbn = character(), Doctype.Doctype = character(), Keyword.Keywords = character())
-  keepListCol <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
-                   "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
-                   "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
+  # keepListCol <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
+  #                  "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
+  #                  "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
+  keepListCol <- c("Title", "Authors", "BookAuthors", "SourceTitle",  "Pages", 
+                   "Volume", "Issue", "Published.BiblioDate", "Published.BiblioYear", 
+                   "Identifier.Doi","Identifier.Eissn", "Identifier.Isbn", "Doctype", "Keywords")
   
   newNames <- c("title","authors","bookAuthors", "publicationName", "pageRange", 
                 "volume","issue", "date", "year", 
@@ -339,8 +345,25 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     if (!is.data.frame(j$Data)) { # a loop to skip over set of 100 records that has an internal server error
       print(paste("j$Data is not a data frame. Nearest record is ", firstRecord))
     } else {
+      j[["Data"]][["UT"]] <- NULL
       jData <- as.data.table(flatten(j$Data))
-      jData[, setdiff(names(jData), keepListCol) := NULL]
+      setnames(jData, old = keepListCol, new = newNames, skip_absent = TRUE)
+      setnames(jData, old = "BookAuthors", new = "bookAuthors", skip_absent = TRUE)
+      if (!"bookAuthors" %in% names(jData)) jData[, bookAuthors := "NULL"] # to deal with jData files that don't have any books
+      if (!"isbn" %in% names(jData)) jData[, isbn := "NULL"] # to deal with jData files that don't have any books
+      # print("names of jData 1")
+      # print(names(jData))
+      # 
+      # print("keeplistCol")
+      # print(keepListCol)
+      # print("setDiff")
+      # print(setdiff(names(jData), newNames))
+      #     print("names of jData 2")
+      #     print(names(jData))
+      
+      jData <- jData[, (newNames), with = FALSE]
+      
+      #      jData[, setdiff(names(jData), keepListCol) := NULL]
       jData[, ] <- lapply(jData[, ], as.character)
       
       queryResults <- rbind(queryResults, jData, fill = TRUE)
@@ -354,7 +377,7 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     }
   }
   
-  setnames(queryResults, old = keepListCol, new = newNames, skip_absent = TRUE)
+  #  setnames(queryResults, old = keepListCol, new = newNames, skip_absent = TRUE)
   if (!"eIssn" %in% names(queryResults)) queryResults[, eIssn := NA] # added July 26 because of a search that didn't return an eIssn column
   queryResults[, eIssn := gsub("-", "", eIssn)]
   queryResults[, keepRef := "y"]
@@ -468,6 +491,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   if (nrResults == 0) {
     print("No references for this query")
   }else{
+    cat(green(query))
     response = scopus_search(query = query, max_count = nrResults, count = 25,  start = 0, verbose = FALSE, view = c("COMPLETE"))
     df <- gen_entries_to_df(response$entries)
     dt.content <- as.data.table(df$df)
@@ -504,11 +528,11 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     # remove non-peer reviewed reference types
     nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
     queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
-#    print(unique(queryResults$document_type))
+    #    print(unique(queryResults$document_type))
     #    print(paste0("searchStrings.names: ", searchStrings.names))
     for (i in 1:length(searchStrings)) {
       #     print(searchStringsList[,.SD[i]]$searchString)
-#       print(searchStringsList[,.SD[i]]$searchString)
+      #       print(searchStringsList[,.SD[i]]$searchString)
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
       
       searchSt <- replace_curly_quote(searchSt)
@@ -728,8 +752,11 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
     queryResults.scopus <- queryResults.scopus[!title %in% temp$rejectTitle,]
   }
   # process if both results have content
-  if (!nrow(queryResults.scopus) == 0 & (!nrow(queryResults.wok) == 0)) {
-    doi.wok <- sort(queryResults.wok$doi)
+  doi.wok <- sort(queryResults.wok$doi)
+  # print(doi.wok)
+  # print(nrow(queryResults.wok))
+  # print(nrow(queryResults.scopus))
+  if (!nrow(queryResults.scopus) == 0 & !nrow(queryResults.wok) == 0 & !is.null(doi.wok)) {
     print(paste0("doi.wok count: ", length(doi.wok))) # doi.wok is a character variable
     doi.scopus <- sort(queryResults.scopus$doi)
     
@@ -748,9 +775,22 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
     queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
     temp <- rejectList_master[queryName %in% outFileName,]
     queryResults.wok.unique <- queryResults.wok.unique[!title %in% temp$rejectTitle,]
+    dois.combined <- unique(c(doi.unique.wok, doi.unique.wok))
+    dois.combined <<- dois.combined[!is.null(dois.combined)]
+    print(paste("csv out: ", paste0("results/dois/combinedDOIs_/", outFileName, "_", Sys.Date(),".csv")))
     
-    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
+    write_csv(as.data.table(dois.combined), paste0("results/dois/combinedDOIs_", outFileName, "_", Sys.Date(),".csv"))
+    
   }
+  # walk(urls.combined, ~ {
+  # try(curl(., handle = h)) %>%
+  #   readLines(warn = FALSE) %>%
+  #   write(file = outFile.bib, append = TRUE)
+  # })
+  # doi2bib(dois.combined, file = paste0("results/", outFileName, "_", Sys.Date(),".bib"), quiet = FALSE)
+  
+  prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
+  #}
   if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
     queryResults.wok.unique <-   queryResults.wok
     nonPeerReviewed.wok <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
@@ -763,7 +803,6 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   # }
   # if (nrow(queryResults.wok) == 0 ) {
   #   print(paste0("WOK results for query ", queryNum, ", query: " , query.wok, " are empty"))
-  # }
 }
 
 
@@ -791,7 +830,7 @@ rawQuerySearchTerms <- function(rawQuery) {
   return(rawQuery)
 }
 
-createBibtexfile <- function(url, outputFileName) {
+createBibtexEntry <- function(doiIn) {
   # code originally from https://stackoverflow.com/questions/12193779/how-to-write-trycatch-in-r
   out <- tryCatch(
     {
@@ -802,9 +841,19 @@ createBibtexfile <- function(url, outputFileName) {
       # in case the "try" part was completed successfully
       
       #      message("This is the 'try' part")
+      h <- new_handle()
+      handle_setheaders(h, "accept" = "application/x-bibtex")
+      urlIn <- paste0("https://doi.org/", doiIn)
+      temp <- paste0("curl(url = '", urlIn,"', handle = h)")
       
+      con <- eval(parse(text = temp))
+      bibtemp <- readLines(con, warn = FALSE)
+      close(con)
+      return(bibtemp)
+      # print(bibtemp)
+      # close(con)
+      #     return(bibtemp)
       # readLines(con=url, warn=FALSE) 
-      curl_download(url, destfile = outputFileName, handle = h, mode = "a", quiet = TRUE)
       # The return value of `readLines()` is the actual value 
       # that will be returned in case there is no condition 
       # (e.g. warning or error). 
@@ -818,24 +867,49 @@ createBibtexfile <- function(url, outputFileName) {
       # message(cond)
       # Choose a return value in case of error
       return("Rejected")
-    },
-    warning = function(cond) {
-      message(paste("URL caused a warning:", url))
-      message("Here's the original warning message:")
-      message(cond)
-      # Choose a return value in case of warning
-      return(NULL)
-    },
-    finally = {
-      # NOTE:
-      # Here goes everything that should be executed at the end,
-      # regardless of success or error.
-      # If you want more than one expression to be executed, then you 
-      # need to wrap them in curly brackets ({...}); otherwise you could
-      # just have written 'finally=<expression>' 
-      message(paste("Processed URL:", url))
     }
+    # warning = function(cond) {
+    #   message(paste("URL caused a warning:", url))
+    #   message("Here's the original warning message:")
+    #   message(cond)
+    #   # Choose a return value in case of warning
+    #   return(NULL)
+    # },
+    # finally = {
+    #   #   # NOTE:
+    #   #   # Here goes everything that should be executed at the end,
+    #   #   # regardless of success or error.
+    #   #   # If you want more than one expression to be executed, then you 
+    #   #   # need to wrap them in curly brackets ({...}); otherwise you could
+    #   #   # just have written 'finally=<expression>' 
+    #   #   message(paste("Processed URL:", url))
+    #   close(con)
+    # }
   )    
   return(out)
 }
 
+doiToBibtex <- function(doiList, filename) {
+  #store all the bibtex entries to a file
+  require(curl)
+  file.create(filename)
+  #  urls.combined <- as.list(paste0("https://doi.org/", doilist$dois.combined))
+  for (j in 1:length(doiList$dois.combined)) {
+    
+    tempDOI <- doiList$dois.combined[j]
+#    print(paste0("doi num :", j, ", doi: ", tempDOI))
+    bibtemp <- createBibtexEntry(tempDOI)
+    write(bibtemp, file = filename, append = TRUE)
+  }
+}
+
+clusterSetup <- function(varList, libList, useCores) {
+  cl <- makeCluster(useCores,  outfile = "")
+  registerDoParallel(cl)
+  if (!missing(libList)) {
+    varList <- c(varList, "libList")
+  }
+  clusterExport(cl, varlist = c(varList))
+  clusterEvalQ(cl, sapply(libList, require, character.only = TRUE))
+  return(cl)
+}

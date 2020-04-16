@@ -10,6 +10,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
 # for more details at http://www.gnu.org/licenses/.
 source("R/citsManagementFunctions.R")
+library(crayon)
 chapter <- "wg2_ch05"
 #chapter <- "wg2_ch16"
 queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "baseQueries"))
@@ -40,13 +41,14 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-#queryNum <- 6
+queryNum <- 103
 
 #for (i in c(20, 22, 39, 44)) {
-  #for (i in as.numeric(missingQueries)) {
+#for (i in as.numeric(missingQueries)) {
 #  for (i in 82:nrow(queries.small)) {
-    for (i in 97) {
-      queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
+#for (i in 86:nrow(queries.small)) {
+  for (i in 101:102) {
+    queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
   prepareOutput(queryNum = queryNum, queries = queries.small, rejectList_master, climateMitigation)
 }
 
@@ -95,8 +97,18 @@ queries.small <- queryInfo[nrResults.scopus < 5000,]
 #   }
 # }
 
-dois.combined <- unique(c(doi.wok, doi.scopus))
-doi2bib(dois.combined, file = paste("results/", outFileName, "_", Sys.Date(),".bib"), quiet = TRUE)
-
 # doi2bib(doi.common, file = paste("results/", outFileName, "_scopus.bib"), quiet = TRUE)
 # doi2bib(doi.wok, file = paste("results/", outFileName, "_wok.bib"), quiet = TRUE)
+
+outFile.bib <- paste0("test", "_", Sys.Date(),".bib")
+h <- new_handle()
+handle_setheaders(h, "accept" = "application/x-bibtex")
+
+for (i in 1:length(dois.combined)) {
+  url <- paste0("https://doi.org/", dois.combined[i])
+  if (!grepl("NULL", url, fixed = TRUE)) {
+    print(paste0("url: ", url))
+    #     try(curl_download(url, destfile = outFile.bib, handle = h, mode = "a"), outFile = "results/tryError.txt")
+    curl_download(url, destfile = outFile.bib, handle = h, mode = "a")
+  }
+}
