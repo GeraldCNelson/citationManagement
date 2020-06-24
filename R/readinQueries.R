@@ -1,4 +1,4 @@
-#Copyright (C) 2019 Gerald C. Nelson, except where noted.
+#Copyright (C) 2019-2020 Gerald C. Nelson, except where noted.
 
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -13,8 +13,11 @@ source("R/citsManagementFunctions.R")
 library(crayon)
 chapter <- "wg2_ch05"
 #chapter <- "wg2_ch16"
+# year range
+yearCoverage.scopus <- "> 2013"
+yearCoverage.wok <- "= 2014-2020"
 queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "baseQueries"))
-
+queries.org <- queries
 # get Scopus api key
 get_api_key(api_key = Sys.getenv('Elsevier_API'))
 if (!have_api_key()) stop("Missing api key")
@@ -22,16 +25,13 @@ if (!have_api_key()) stop("Missing api key")
 # get WOS api key
 wosliteKey <- Sys.getenv("wosliteKey")
 
-# year range
-yearCoverage.scopus <- "> 2013"
-yearCoverage.wok <- "= 2014-2020"
-
 if (!nrow(queries) == max(queries$queryNumber)) {
   stop("Query numbers probably need to be updated.")
 }
 
 #get info for all the queries in queries from wok database
 queryInfo <- getDBinfo(queries, yearCoverage.wok, yearCoverage.scopus,CCSearchString = CCSearchString)
+
 inDT <- queryInfo
 outName <- paste0("queriesInfo.WOKnScopus_", chapter) 
 desc = "SCOPUS and Web of Knowledge Query, QueryId, and number of references for each query in queries.xlsx"
@@ -41,13 +41,13 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 103
+queryNum <- 107
 
 #for (i in c(20, 22, 39, 44)) {
 #for (i in as.numeric(missingQueries)) {
 #  for (i in 82:nrow(queries.small)) {
 #for (i in 86:nrow(queries.small)) {
-  for (i in 101:102) {
+  for (i in 86:103) {
     queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
   prepareOutput(queryNum = queryNum, queries = queries.small, rejectList_master, climateMitigation)
 }
