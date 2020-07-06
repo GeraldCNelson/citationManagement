@@ -39,12 +39,15 @@ CCSearchString <- climateChangeSource
 
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
-shortNames.countries <- c("Syria", "Ivory Coast", "Laos", "Libya", "South Korea", "North Korea")
+shortNames.countries <- c("Syria", "Ivory Coast", "Laos", "Libya", "South Korea", "North Korea", "Russia")
 countriesToRemove <- c("Anguilla", "Åland Islands", "Albania", "Andorra", "Netherlands Antilles", "Northern Mariana Islands", "Bonaire, Sint Eustatius and Saba", "Saint Barthélemy", "Bouvet Island", 
                        "Cocos (Keeling) Islands", "Christmas Island", "Guernsey", "Gibraltar", "Heard Island and McDonald Islands", "Isle of Man", "British Indian Ocean Territory",
                        "Mayotte", "Norfolk Island", "South Georgia and The South Sandwich Islands", "Saint Helena, Ascension and Tristan da Cunha", "Svalbard and Jan Mayen", 
                        "San Marino", "Saint Pierre and Miquelon", "Macao", "Saint Martin (French part)",  "Sint Maarten (Dutch part)", "Saint Vincent and The Grenadines",
                        "Wallis and Futuna", "Tokelau")
+library(readr)
+abstractStringToDelete <- read_lines("data-raw/countryStringsToDelete.txt") # used to eliminate from the .temp version of the abstract column words like anomalies that include mali in them.
+abstractStringToDelete <- paste( abstractStringToDelete, collapse = "|")
 searchStrings.countries <- regions_lookup$country_name.ISO
 searchStrings.countries <- searchStrings.countries[!searchStrings.countries %in% countriesToRemove]
 searchStrings.countries <- c(searchStrings.countries, shortNames.countries)
@@ -393,6 +396,8 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
 }
 
 constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString, climateMitigation) {
+  CCSearchString <- gsub('{', '"', CCSearchString, fixed = TRUE) # get rid of the braces that scopus seems to want 
+  CCSearchString <- gsub('}', '"', CCSearchString, fixed = TRUE)
   query.wok <- sprintf('PY %s AND TS=((%s) AND ((%s)) NOT ((%s)))', yearCoverage.wok, rawQuery, CCSearchString, climateMitigation)
   query.wok <- gsub('{','"', query.wok, perl = TRUE)
   query.wok <- gsub('}','"', query.wok, perl = TRUE)
@@ -402,8 +407,12 @@ constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString, clima
 }
 
 constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString, climateMitigation) {
-  query.scopus <- sprintf('PUBYEAR %s AND TITLE-ABS-KEY((%s) AND ((%s)) AND NOT (%s))', yearCoverage.scopus, rawQuery,  CCSearchString, climateMitigation)
+  # query.scopus.begin <- paste0(yearCoverage.scopus, " AND TITLE-ABS (", rawQuery, ") OR AUTH-KEY (", rawQuery, ") ")
+  # query.scopus.end <- sprintf(' AND ((%s)) AND NOT (%s)', CCSearchString, climateMitigation)
+  # query.scopus <- paste0(query.scopus.begin, query.scopus.end)
+  query.scopus <- sprintf('%s AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND (%s) AND NOT (%s)', yearCoverage.scopus, rawQuery, rawQuery, CCSearchString, climateMitigation)
   query.scopus <- replace_curly_quote(query.scopus)
+  print(query.scopus)
   return(query.scopus)
 }
 
@@ -533,8 +542,21 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     setkey(queryResults)
     
     # remove non-peer reviewed reference types
-    nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
+    nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Proceedings Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
     queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
+    queryResults[, abstract.temp := abstract]
+    write_rds(queryResults, "queryResultsBefore.RDS")
+    require(stringr)
+    
+#    queryResults[, abstract.temp := str_remove_all(abstract.temp, abstractStringToDelete)]
+    # from https://stackoverflow.com/questions/56083274/removing-multiple-words-from-a-string-using-a-vector-instead-of-regexp-in-r
+    queryResults[, abstract.temp := trimws(gsub(abstractStringToDelete, "\\1", abstract.temp, ignore.case = TRUE))]
+    write_rds(queryResults, "queryResultsAfter.RDS")
+    
+    searchColsTemp <- c("title", "abstract.temp", "author_keywords")
+    
+    
+    queryResults
     #    print(unique(queryResults$document_type))
     #    print(paste0("searchStrings.names: ", searchStrings.names))
     for (i in 1:length(searchStrings)) {
@@ -542,7 +564,6 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
       #       print(searchStringsList[,.SD[i]]$searchString)
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
       searchSt <- replace_curly_quote(searchSt)
-      
       for (j in searchSt) {
         # grepl and startsWith return a logical vector
         #       if (grepl("*", j, fixed = TRUE)) {
@@ -554,7 +575,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
         # #         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE))), .SDcols = searchCols]
         #          #         print(paste("jnew ",  jnew))
         #        } else {
-        i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchCols]
+        i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = FALSE, perl = FALSE))), .SDcols = searchColsTemp]
         #       }
         
         #   if (i == 1) {
@@ -566,6 +587,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
         queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]), j , sep = ", ")]
       }
     }
+    queryResults[, abstract.temp := NULL]
     
     for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
@@ -771,6 +793,7 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   if (!nrow(queryResults.scopus) == 0 & !nrow(queryResults.wok) == 0 & !is.null(doi.wok)) {
     print(paste0("doi.wok count: ", length(doi.wok))) # doi.wok is a character variable
     doi.scopus <- sort(queryResults.scopus$doi)
+    print(paste0("doi.scopus count: ", length(doi.scopus))) # doi.wok is a character variable
     
     doi.common <- doi.wok[doi.wok %in% doi.scopus]
     doi.unique.wok <- doi.wok[!doi.wok %in% doi.scopus]

@@ -14,8 +14,8 @@ library(crayon)
 chapter <- "wg2_ch05"
 #chapter <- "wg2_ch16"
 # year range
-yearCoverage.scopus <- "> 2013"
-yearCoverage.wok <- "= 2014-2020"
+yearCoverage.scopus <- "PUBYEAR > 2013 AND PUBYEAR < 2021"
+yearCoverage.wok <- "= 2014-2019"
 queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "baseQueries"))
 queries.org <- queries
 # get Scopus api key
@@ -41,7 +41,7 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 50
+queryNum <- 44
 
 #for (i in c(20, 22, 39, 44)) {
 #for (i in as.numeric(missingQueries)) {
