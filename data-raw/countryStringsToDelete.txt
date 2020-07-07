@@ -1,12 +1,15 @@
 Agricultural Academy, Bulgaria
 American Meteorological Society
 American Society of Agronomy
+Australian Rangeland
+Australia, Queensland
 Basel, Switzerland
 Budapest, Hungary
 Canadian Agricultural Economics Society
 Canadian Crown
 Chinese Academy of Sciences
 Chinese Journal of Applied Ecology
+Iasi, Romania
 in right of Canada
 India Meteorological Department
 Indian Council of Agricultural Research
@@ -15,7 +18,10 @@ Indian Society
 Indonesian Geographers Association
 Informa UK Limited
 INRA and Springer-Verlag France
+Japanese Society
 Korean Society
+Media Singapore
+Meteorology of Japan
 Polish Academy of Sciences
 Publishing Switzerland
 Royal Netherlands Society
@@ -23,6 +29,7 @@ Russian Academy of Sciences
 Science China Press
 Slovenian Environment Agency
 Society of Japan
+Agricultural Meteorology of Japan
 Soil Science Society of Pakistan
 South African Water Research Commission
 Springer (India)
@@ -34,11 +41,11 @@ Springer Nature Switzerland AG
 Springer-Verlag GmbH Austria
 Springer-Verlag GmbH Germany
 Taiwan Agricultural Engineers Society
+Toronto Canada
 Australian Journal
 Chinese Meteorological Society
 Transactions of the Chinese Society
 Universidad Nacional de Colombia
-global warming
 anomalies
 normalize
 normalized
@@ -55,4 +62,34 @@ malic acid
 malia
 formalize
 glomalin
+global population
+global famine
+global drought
+global average
+global land
+global water use
+global circulation
+global SOC
+global climate circulation models
+global circulation
+global food
+global heating
+global south
+IGI global
+global eco-systems
+global terrestrial
+global cropland
+global land
+global validation
+global challenges
+global incidence
+global cotton
+global meta-analysis
+global perspectives
+global socio-economic
+global socio-economic
+global cereal
+global network
+global connectivity
+global dynamic
 

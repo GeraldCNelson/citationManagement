@@ -1,4 +1,4 @@
-#Copyright (C) 2019 Gerald C. Nelson, except where noted.
+#Copyright (C) 2019-2020 Gerald C. Nelson, except where noted.
 
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the Free
@@ -26,6 +26,7 @@ climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.
 
 # get list of rejected references
 rejectList_master <- as.data.table(read.xlsx("data/rejected/rejected_out/rejectList_master.xlsx"))
+RegionLookupWG2 <- as.data.table(read_excel("data-raw/Regional_chapters_Countries_WGII.xlsx", skip = 1))
 
 # construct the climate change search string here
 climateChangeSource <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChangeSource", searchString]
@@ -39,7 +40,7 @@ CCSearchString <- climateChangeSource
 
 # get country names
 regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
-shortNames.countries <- c("Syria", "Ivory Coast", "Laos", "Libya", "South Korea", "North Korea", "Russia")
+shortNames.countries <- c("Syria", "Ivory Coast", "Laos", "Libya", "South Korea", "North Korea", "Russia", "Vietnam")
 countriesToRemove <- c("Anguilla", "Åland Islands", "Albania", "Andorra", "Netherlands Antilles", "Northern Mariana Islands", "Bonaire, Sint Eustatius and Saba", "Saint Barthélemy", "Bouvet Island", 
                        "Cocos (Keeling) Islands", "Christmas Island", "Guernsey", "Gibraltar", "Heard Island and McDonald Islands", "Isle of Man", "British Indian Ocean Territory",
                        "Mayotte", "Norfolk Island", "South Georgia and The South Sandwich Islands", "Saint Helena, Ascension and Tristan da Cunha", "Svalbard and Jan Mayen", 
@@ -58,7 +59,8 @@ searchStrings.countries <- c(searchStrings.countries, searchStrings.USStates)
 searchStringsList <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "filterTerms"))
 countrylist <- list("searchStrings.countries", as.list(searchStrings.countries))
 regionsByIncomeList <- list("searchStrings.regionsByIncome", as.list(searchStrings.regionsByIncome))
-searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
+# remove the countries search so it can be done separately to deal with the 'global' problem
+#searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
 
 #' Title cleanupRefFiles - remove old versions and save rds and xlsx or csv versions of the file
 #' @param inDT - name of the data table or frame to be written out
@@ -410,7 +412,7 @@ constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString,
   # query.scopus.begin <- paste0(yearCoverage.scopus, " AND TITLE-ABS (", rawQuery, ") OR AUTH-KEY (", rawQuery, ") ")
   # query.scopus.end <- sprintf(' AND ((%s)) AND NOT (%s)', CCSearchString, climateMitigation)
   # query.scopus <- paste0(query.scopus.begin, query.scopus.end)
-  query.scopus <- sprintf('%s AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND (%s) AND NOT (%s)', yearCoverage.scopus, rawQuery, rawQuery, CCSearchString, climateMitigation)
+  query.scopus <- sprintf('%s AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND NOT (%s)', yearCoverage.scopus, rawQuery, rawQuery, CCSearchString, CCSearchString, climateMitigation)
   query.scopus <- replace_curly_quote(query.scopus)
   print(query.scopus)
   return(query.scopus)
@@ -497,7 +499,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   
   # what variables in the reference list should be searched for
   searchCols <- c("title", "abstract", "author_keywords") # removed , "document_type" Aug 1, 2019
-  # create blank queryResuls in case there are 0 results of a search
+  # create blank queryResults in case there are 0 results of a search
   queryResults <- data.table(NULL)
   # next few lines used to get totalresults
   query <- gsub("\\\\", "", query)
@@ -537,6 +539,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
       queryResults[, (i) := "None"]
     }
     queryResults[, keepRef := "y"]
+    queryResults[, IPCCregions := "None"]
+    
     setcolorder(queryResults, "keepRef")
     queryResults[, notPeerRev := "No"]
     setkey(queryResults)
@@ -545,24 +549,31 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Proceedings Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
     queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
     queryResults[, abstract.temp := abstract]
+    queryResults[, abstract.temp.global := abstract]
     write_rds(queryResults, "queryResultsBefore.RDS")
     require(stringr)
     
 #    queryResults[, abstract.temp := str_remove_all(abstract.temp, abstractStringToDelete)]
     # from https://stackoverflow.com/questions/56083274/removing-multiple-words-from-a-string-using-a-vector-instead-of-regexp-in-r
+    globalStringToDelete <- c("global warming", "global climate change", "global climate model",  "global climate")
+   globalStringToDelete <- paste( globalStringToDelete, collapse = "|")
+    
     queryResults[, abstract.temp := trimws(gsub(abstractStringToDelete, "\\1", abstract.temp, ignore.case = TRUE))]
-    write_rds(queryResults, "queryResultsAfter.RDS")
+    queryResults[, abstract.temp.global := trimws(gsub(globalStringToDelete, "\\1", abstract.temp.global, ignore.case = TRUE))]
+    #    write_rds(queryResults, "queryResultsAfter.RDS")
     
     searchColsTemp <- c("title", "abstract.temp", "author_keywords")
     
+    #queryResults
     
-    queryResults
     #    print(unique(queryResults$document_type))
     #    print(paste0("searchStrings.names: ", searchStrings.names))
     for (i in 1:length(searchStrings)) {
+#      print(paste0("searchString: ", i, ", ", searchStrings[i]))
       #     print(searchStringsList[,.SD[i]]$searchString)
       #       print(searchStringsList[,.SD[i]]$searchString)
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
+ #     print(paste0("searchSt: ", searchSt))
       searchSt <- replace_curly_quote(searchSt)
       for (j in searchSt) {
         # grepl and startsWith return a logical vector
@@ -575,7 +586,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
         # #         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE))), .SDcols = searchCols]
         #          #         print(paste("jnew ",  jnew))
         #        } else {
-        i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = FALSE, perl = FALSE))), .SDcols = searchColsTemp]
+        i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchColsTemp]
         #       }
         
         #   if (i == 1) {
@@ -587,13 +598,26 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
         queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]), j , sep = ", ")]
       }
     }
-    queryResults[, abstract.temp := NULL]
+ #   write_rds(queryResults, "queryResultsAfter.RDS")
+    searchColsGlobal <- c("title", "abstract.temp.global", "author_keywords")
+ 
+      iglobal <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl("global", x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchColsGlobal]
+      queryResults[iglobal, countries := paste("global" , sep = ", ")]
+      
+    queryResults[, c("abstract.temp", "abstract.temp.global") := NULL]
+    queryColOrder <- c("keepRef", "title", "firstAuthor", "publicationName", "volume", "date", "doi", "abstract", "citations", "pubType", 
+    "document_type", "author_keywords", "eIssn", "issue", "pageRange", "countries", "regions", "IPCCregions", "baseQuery", "RCP", "SSP", "CCsource", "CCimpact", 
+    "CCadapt", "CCobserved", "CCvulnerability", "animals", "cereals", "fruits", "vegetables", "rootsNtubers", "stimulants", "fish", "foodSec", "foodSafety", 
+    "notPeerRev", "timePeriod", "econ", "gender", "indigenous", "ethnicity", "adaptStrat", "climZones", "crpSystems", "nutrients", "fibre", "pestsPlants", 
+    "pestsAnimals", "cropModels", "engLevel", "adapType", "adapProfile", "adapStage", "adapBeneficiary", "adapLimits", "adapConstraints", "extentCC", 
+    "biotech", "breadbaskets", "comments")
+    setcolorder(queryResults, neworder = queryColOrder)
     
     for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
     }
-    print(sort(names(queryResults)))
-    print(sort(searchStrings.names))
+#    print(sort(names(queryResults)))
+#    print(sort(searchStrings.names))
     queryResults[, (searchStrings.names) := (lapply(.SD, function(x) {
       sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse = ', '))
     })), .SDcols = searchStrings.names]
@@ -819,7 +843,6 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
     # remove state's names and add United States to country list
     
     for (countryName in state.name) {
-#      queryResults.scopus <- queryResults.scopus %>% str_replace_all(countryName, "United States")
       queryResults.scopus[, countries := gsub(countryName, "United States", countries)]
       queryResults.scopus[, countries := gsub("United States, United States", "United States", countries)]
     }

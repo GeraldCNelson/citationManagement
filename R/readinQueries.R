@@ -15,7 +15,7 @@ chapter <- "wg2_ch05"
 #chapter <- "wg2_ch16"
 # year range
 yearCoverage.scopus <- "PUBYEAR > 2013 AND PUBYEAR < 2021"
-yearCoverage.wok <- "= 2014-2019"
+yearCoverage.wok <- "= 2014-2020"
 queries <- as.data.table(read_excel(paste0("data-raw/queries_", chapter, ".xlsx"), sheet = "baseQueries"))
 queries.org <- queries
 # get Scopus api key
@@ -41,14 +41,14 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 44
+queryNum <- 64
 
 #for (i in c(20, 22, 39, 44)) {
 #for (i in as.numeric(missingQueries)) {
 #  for (i in 82:nrow(queries.small)) {
 #for (i in 86:nrow(queries.small)) {
-  for (i in 86:103) {
-    queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
+for (i in 86:103) {
+  queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
   prepareOutput(queryNum = queryNum, queries = queries.small, rejectList_master, climateMitigation)
 }
 
