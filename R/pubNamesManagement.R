@@ -2,7 +2,7 @@ source("R/citsManagementFunctions.R")
 library(readxl)
 refsList <- list.files("results")
 removeFromRefsList <- refsList[grep("queriesIn", refsList, fixed = TRUE)]
-refsList <- refsList[!refsList %in% c("Readme.txt", "tryError.txt", "dois")]
+refsList <- refsList[!refsList %in% c("Readme.txt", "tryError.txt", "dois", "oneRefPubs_scopus.csv", "wokPubNames_unique.csv", "oneRefPubs_wok.csv")]
 refsList <- refsList[!refsList %in% removeFromRefsList]
 scopusPubNames <- data.table(publicationName = character(), doi = character(), title = character(), queryName = character())
 wokPubNames <- data.table(publicationName = character(), doi = character(), title = character(), queryName = character())

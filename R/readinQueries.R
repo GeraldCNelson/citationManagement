@@ -41,13 +41,14 @@ cleanup(inDT = inDT, outName = outName, destDir = "results", writeFiles = "xlsx"
 #keep only queries that have less than 5000 SCOPUS references
 queries.small <- queryInfo[nrResults.scopus < 5000,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
-queryNum <- 64
+queryNum <- 92
 
 #for (i in c(20, 22, 39, 44)) {
 #for (i in as.numeric(missingQueries)) {
 #  for (i in 82:nrow(queries.small)) {
 #for (i in 86:nrow(queries.small)) {
-for (i in 86:103) {
+# problems with 3 for wok, 8 - scopus has no entries, 16 for scopus
+for (i in 87:105) {
   queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))
   prepareOutput(queryNum = queryNum, queries = queries.small, rejectList_master, climateMitigation)
 }

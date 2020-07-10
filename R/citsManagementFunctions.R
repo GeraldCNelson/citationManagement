@@ -26,8 +26,15 @@ climateChangeSearchTerms <- as.data.table(read_excel("data-raw/queries_wg2_ch05.
 
 # get list of rejected references
 rejectList_master <- as.data.table(read.xlsx("data/rejected/rejected_out/rejectList_master.xlsx"))
+# get IPCC country and region names
 RegionLookupWG2 <- as.data.table(read_excel("data-raw/Regional_chapters_Countries_WGII.xlsx", skip = 1))
-
+regionColsToKeep <- c("WGII_Region", "Sub-region Name", "Country or Area")
+regionColsToDelete <- names(RegionLookupWG2)[!names(RegionLookupWG2) %in% regionColsToKeep]
+RegionLookupWG2[, (regionColsToDelete) := NULL]
+countryLongNameAdditions <- as.data.table(read_excel("data-raw/countryLongNameAdditions.xlsx"))
+RegionLookupWG2 <- rbind(RegionLookupWG2, countryLongNameAdditions)
+#setnames(RegionLookupWG2, old = c("ISO_A3", "Country or Area"), new = c("ISO_code", "countryName"))
+setnames(RegionLookupWG2, old = c("WGII_Region", "Sub-region Name", "Country or Area"), new = c("WGII_Region", "WGII_Subregion", "countryName"))
 # construct the climate change search string here
 climateChangeSource <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateChangeSource", searchString]
 climateImpacts <- climateChangeSearchTerms[searchStringName %in% "searchStrings.climateImpacts", searchString]
@@ -39,7 +46,11 @@ CCSearchString <- climateChangeSource
 #CCSearchString <- gsub("\\\\", "", CCSearchString)
 
 # get country names
-regions_lookup <- read_excel("data-raw/regions lookup June 15 2018.xlsx")
+regions_lookup <- as.data.table(read_excel("data-raw/regions lookup June 15 2018.xlsx"))
+colsToKeep <- c("ISO_code",  "country_name.ISO")
+colsToDelete <- names(regions_lookup)[!names(regions_lookup) %in% colsToKeep]
+regions_lookup[, (colsToDelete) := NULL]
+
 shortNames.countries <- c("Syria", "Ivory Coast", "Laos", "Libya", "South Korea", "North Korea", "Russia", "Vietnam")
 countriesToRemove <- c("Anguilla", "Åland Islands", "Albania", "Andorra", "Netherlands Antilles", "Northern Mariana Islands", "Bonaire, Sint Eustatius and Saba", "Saint Barthélemy", "Bouvet Island", 
                        "Cocos (Keeling) Islands", "Christmas Island", "Guernsey", "Gibraltar", "Heard Island and McDonald Islands", "Isle of Man", "British Indian Ocean Territory",
@@ -54,13 +65,17 @@ searchStrings.countries <- searchStrings.countries[!searchStrings.countries %in%
 searchStrings.countries <- c(searchStrings.countries, shortNames.countries)
 searchStrings.regionsByIncome <- regions_lookup$region_code.WB.income
 searchStrings.USStates <-  state.name #built into r
+# next three lines needed so West Virgina string is removed before Virginia in the process of converting state names to United States
+virginias <- c("West Virginia", "Virginia")
+searchStrings.USStates <- searchStrings.USStates[!searchStrings.USStates %in% virginias]
+searchStrings.USStates <- c(searchStrings.USStates, virginias)
 searchStrings.countries <- c(searchStrings.countries, searchStrings.USStates)
 # other search strings
 searchStringsList <- as.data.table(read_excel("data-raw/queries_wg2_ch05.xlsx", sheet = "filterTerms"))
 countrylist <- list("searchStrings.countries", as.list(searchStrings.countries))
 regionsByIncomeList <- list("searchStrings.regionsByIncome", as.list(searchStrings.regionsByIncome))
 # remove the countries search so it can be done separately to deal with the 'global' problem
-#searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
+searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.countries)), searchStringsList)
 
 #' Title cleanupRefFiles - remove old versions and save rds and xlsx or csv versions of the file
 #' @param inDT - name of the data table or frame to be written out
@@ -281,6 +296,7 @@ readinWOK <- function(query) {
   }
   
   step = 0
+  # browser()
   while (notFinished) {
     step = step + 1
     print(step)
@@ -332,17 +348,17 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   queryResults <- c(Title.Title = character(), Author.Authors = character(), Author.BookAuthors = character(), Source.SourceTitle = character(),  Source.Pages = character(), 
                     Source.Volume = character(), Source.Issue = character(), Source.Published.BiblioDate = character(), Source.Published.BiblioYear = character(), 
                     Other.Identifier.Doi = character(),Other.Identifier.Isbn = character(), Doctype.Doctype = character(), Keyword.Keywords = character())
-   keepListCol.long <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
-                    "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
-                   "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
+  keepListCol.long <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
+                        "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
+                        "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
   keepListCol.short <- c("Title", "Authors", "BookAuthors", "SourceTitle",  "Pages", 
-                   "Volume", "Issue", "Published.BiblioDate", "Published.BiblioYear", 
-                   "Identifier.Doi","Identifier.Eissn", "Identifier.Isbn", "Doctype", "Keywords")
+                         "Volume", "Issue", "Published.BiblioDate", "Published.BiblioYear", 
+                         "Identifier.Doi","Identifier.Eissn", "Identifier.Isbn", "Doctype", "Keywords")
   
   newNames <- c("title","authors","bookAuthors", "publicationName", "pageRange", 
                 "volume","issue", "date", "year", 
                 "doi", "eIssn", "isbn", "document_type", "keywords")
-  
+  # browser()
   while (notFinished) {
     if (nrResults < (firstRecord + count) & !nrResults == -1) {
       count = nrResults - firstRecord
@@ -359,8 +375,11 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
       j[["Data"]][["UT"]] <- NULL
       jData <- as.data.table(flatten(j$Data))
       if ("Title.Title"  %in%  names(jData)) {keepListCol <- keepListCol.long} else {keepListCol <- keepListCol.short}
+      #      print(sort(names(jData)))
       setnames(jData, old = keepListCol, new = newNames, skip_absent = TRUE)
       setnames(jData, old = "BookAuthors", new = "bookAuthors", skip_absent = TRUE)
+      setnames(jData, old = "Issue", new = "issue", skip_absent = TRUE)
+      setnames(jData, old = "Published.BiblioDate", new = "date", skip_absent = TRUE)
       if (!"bookAuthors" %in% names(jData)) jData[, bookAuthors := "NULL"] # to deal with jData files that don't have any books
       if (!"isbn" %in% names(jData)) jData[, isbn := "NULL"] # to deal with jData files that don't have any books
       # print("names of jData 1")
@@ -373,8 +392,8 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
       #     print("names of jData 2")
       #     print(names(jData))
       
+      #   print(sort(names(jData)))
       jData <- jData[, (newNames), with = FALSE]
-      
       #      jData[, setdiff(names(jData), keepListCol) := NULL]
       jData[, ] <- lapply(jData[, ], as.character)
       
@@ -530,6 +549,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     for (i in searchStrings.names) {
       queryResults[, (i) := "None"] # add None to the cell and then update below where there is actually an entry
     }
+    #   queryResults[, countries := "None"]
     
     # new columns with no search strings. Used for manual entry of information
     #    colsWithNoSearchStrings <- c("warmingDegrees (C)", "prod_system",  "resid_damage", "comments") - initial version
@@ -539,8 +559,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
       queryResults[, (i) := "None"]
     }
     queryResults[, keepRef := "y"]
-    queryResults[, IPCCregions := "None"]
-    
+    # queryResults[, IPCCregions := "None"]
+    # queryResults[, IPCCsubregions := "None"]
     setcolorder(queryResults, "keepRef")
     queryResults[, notPeerRev := "No"]
     setkey(queryResults)
@@ -553,14 +573,10 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     write_rds(queryResults, "queryResultsBefore.RDS")
     require(stringr)
     
-#    queryResults[, abstract.temp := str_remove_all(abstract.temp, abstractStringToDelete)]
     # from https://stackoverflow.com/questions/56083274/removing-multiple-words-from-a-string-using-a-vector-instead-of-regexp-in-r
-    globalStringToDelete <- c("global warming", "global climate change", "global climate model",  "global climate")
-   globalStringToDelete <- paste( globalStringToDelete, collapse = "|")
     
     queryResults[, abstract.temp := trimws(gsub(abstractStringToDelete, "\\1", abstract.temp, ignore.case = TRUE))]
-    queryResults[, abstract.temp.global := trimws(gsub(globalStringToDelete, "\\1", abstract.temp.global, ignore.case = TRUE))]
-    #    write_rds(queryResults, "queryResultsAfter.RDS")
+    #      write_rds(queryResults, "queryResultsAfter.RDS")
     
     searchColsTemp <- c("title", "abstract.temp", "author_keywords")
     
@@ -568,12 +584,17 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     
     #    print(unique(queryResults$document_type))
     #    print(paste0("searchStrings.names: ", searchStrings.names))
+    
+    # remove searchStrings.region to deal with the 'global' problem separately
+    searchStrings <- searchStrings[!searchStrings %in% "searchStrings.regions"]
+    searchStringsList <- searchStringsList[!searchStringName %in% "searchStrings.regions",]
+    searchStrings.names <-  searchStrings.names[!searchStrings.names %in% "regions"]
     for (i in 1:length(searchStrings)) {
-#      print(paste0("searchString: ", i, ", ", searchStrings[i]))
+      #      print(paste0("searchString: ", i, ", ", searchStrings[i]))
       #     print(searchStringsList[,.SD[i]]$searchString)
       #       print(searchStringsList[,.SD[i]]$searchString)
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
- #     print(paste0("searchSt: ", searchSt))
+      #     print(paste0("searchSt: ", searchSt))
       searchSt <- replace_curly_quote(searchSt)
       for (j in searchSt) {
         # grepl and startsWith return a logical vector
@@ -598,26 +619,28 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
         queryResults[i1, (searchStrings.names[i]) := paste(get(searchStrings.names[i]), j , sep = ", ")]
       }
     }
- #   write_rds(queryResults, "queryResultsAfter.RDS")
+    #   write_rds(queryResults, "queryResultsAfter.RDS")
+    globalStringToDelete <- c("global warming", "global climate", "global climate model","global population", "global famine", "global drought", 
+                              "global average", "global land", "global water", "global circulation", "global SOC", "global climate circulation models", "global circulation", 
+                              "global food", "global heating", "global south", "IGI global", "global eco-systems", "global terrestrial", "global cropland", "global land", "global validation", 
+                              "global challenges", "global incidence", "global cotton", "global meta-analysis", "global perspectives", "global socio-economic", 
+                              "global cereal", "global network", "global connectivity", "global dynamic", "global event", "genomic/global", "global transcriptomic", "global dependency", "global view")
+    globalStringToDelete <- paste( globalStringToDelete, collapse = "|")
+    queryResults[, abstract.temp.global := trimws(gsub(globalStringToDelete, "\\1", abstract.temp.global, ignore.case = TRUE))]
+    
     searchColsGlobal <- c("title", "abstract.temp.global", "author_keywords")
- 
-      iglobal <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl("global", x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchColsGlobal]
-      queryResults[iglobal, countries := paste("global" , sep = ", ")]
-      
+    
+    iglobal <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl("global", x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchColsGlobal]
+    queryResults[iglobal, regions := paste("global" , sep = ", ")]
+    
     queryResults[, c("abstract.temp", "abstract.temp.global") := NULL]
-    queryColOrder <- c("keepRef", "title", "firstAuthor", "publicationName", "volume", "date", "doi", "abstract", "citations", "pubType", 
-    "document_type", "author_keywords", "eIssn", "issue", "pageRange", "countries", "regions", "IPCCregions", "baseQuery", "RCP", "SSP", "CCsource", "CCimpact", 
-    "CCadapt", "CCobserved", "CCvulnerability", "animals", "cereals", "fruits", "vegetables", "rootsNtubers", "stimulants", "fish", "foodSec", "foodSafety", 
-    "notPeerRev", "timePeriod", "econ", "gender", "indigenous", "ethnicity", "adaptStrat", "climZones", "crpSystems", "nutrients", "fibre", "pestsPlants", 
-    "pestsAnimals", "cropModels", "engLevel", "adapType", "adapProfile", "adapStage", "adapBeneficiary", "adapLimits", "adapConstraints", "extentCC", 
-    "biotech", "breadbaskets", "comments")
-    setcolorder(queryResults, neworder = queryColOrder)
+    
     
     for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
     }
-#    print(sort(names(queryResults)))
-#    print(sort(searchStrings.names))
+    #    print(sort(names(queryResults)))
+    #    print(sort(searchStrings.names))
     queryResults[, (searchStrings.names) := (lapply(.SD, function(x) {
       sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse = ', '))
     })), .SDcols = searchStrings.names]
@@ -631,13 +654,62 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     queryResults[, author_keywords := str_replace_all(author_keywords, " \\|, ", " ")]
     queryResults[, author_keywords := str_replace_all(author_keywords, " \\|", ", ")]
   }
+   #browser()
+  
+  for (countryName in state.name) {
+    queryResults[, countries := gsub(countryName, "United States", countries)]
+    queryResults[, countries := gsub("United States, United States", "United States", countries)]
+    queryResults[, countries := gsub("United States, United States, United States", "United States", countries)]
+  }
+  
+  # do IPCCregions
+  
+   queryResult.countries <- queryResults[, c("countries")]
+   queryResult.countries[, row := seq_len(.N)] # adds a new column called row that has the row number in each cell
+  # next line adds single region to the IPCCregions column and adds rows for references that have multiple region names
+#  queryResults.temp <- copy(queryResults)
+   queryResult.countries <- splitstackshape::cSplit(queryResult.countries, 'countries', ',', 
+                                 direction = 'long')[RegionLookupWG2, IPCCregions := WGII_Region, 
+                                                     on = c(countries = "countryName")]
+  
+   queryResult.countries <- queryResult.countries[, lapply(.SD, toString), row][,row:=NULL]
+   queryResult.countries <- queryResult.countries[IPCCregions == "NA",  IPCCregions := "None"]
+   queryResults[, countries := NULL]
+   queryResults <- cbind(queryResults, queryResult.countries)
+   
+  # do IPCCsubregions
+  
+   queryResult.countries <- queryResults[, c("countries")]
+   queryResult.countries[, row := seq_len(.N)] # adds a new column called row that has the row number in each cell
+   # next line adds single region to the IPCCregions column and adds rows for references that have multiple region names
+   #  queryResults.temp <- copy(queryResults)
+   queryResult.countries <- splitstackshape::cSplit(queryResult.countries, 'countries', ',', 
+                                                    direction = 'long')[RegionLookupWG2, IPCCsubregions := WGII_Subregion, 
+                                                                        on = c(countries = "countryName")]
+   
+   queryResult.countries <- queryResult.countries[, lapply(.SD, toString), row][,row:=NULL]
+   queryResult.countries <- queryResult.countries[IPCCsubregions == "NA",  IPCCsubregions := "None"]
+   queryResults[, countries := NULL]
+   queryResults <- cbind(queryResults, queryResult.countries)
+  
   # set scopus column name order here to make sure all queries have the same column order
   # column names that should be in all scopus refs
   scopusColNames <- c("title", "firstAuthor", "publicationName", "eIssn", "volume", "issue",         
                       "date", "doi", "abstract", "citations", "pubType", "document_type", "pageRange",      
                       "author_keywords")
   filterColumns <- names(queryResults)[!names(queryResults) %in% c("keepRef", "comments", scopusColNames)]
-  setcolorder(queryResults, c("keepRef", scopusColNames, filterColumns, "comments"))
+  #  setcolorder(queryResults, c("keepRef", scopusColNames, filterColumns, "comments"))
+  queryColOrder <- c("keepRef", "title", "firstAuthor", "publicationName", "volume", "date", "doi", "abstract", "citations", "pubType", 
+                     "document_type", "author_keywords", "eIssn", "issue", "pageRange", "countries", "regions", "IPCCregions", "IPCCsubregions", "baseQuery", "RCP", "SSP", "CCsource", "CCimpact", 
+                     "CCadapt", "CCobserved", "CCvulnerability", "animals", "cereals", "fruits", "vegetables", "rootsNtubers", "stimulants", "fish", "foodSec", "foodSafety", 
+                     "notPeerRev", "timePeriod", "econ", "gender", "indigenous", "ethnicity", "adaptStrat", "climZones", "crpSystems", "nutrients", "fibre", "pestsPlants", 
+                     "pestsAnimals", "cropModels", "engLevel", "adapType", "adapProfile", "adapStage", "adapBeneficiary", "adapLimits", "adapConstraints", "extentCC", 
+                     "biotech", "breadbaskets", "comments")
+  setcolorder(queryResults, neworder = queryColOrder)
+  
+  write_rds(queryResults, "queryResultsAfter.RDS")
+  
+  
   print('Done with SCOPUS')
   return(queryResults)
 }
@@ -842,272 +914,267 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
     
     # remove state's names and add United States to country list
     
-    for (countryName in state.name) {
-      queryResults.scopus[, countries := gsub(countryName, "United States", countries)]
-      queryResults.scopus[, countries := gsub("United States, United States", "United States", countries)]
-    }
-   }
-    # walk(urls.combined, ~ {
-    # try(curl(., handle = h)) %>%
-    #   readLines(warn = FALSE) %>%
-    #   write(file = outFile.bib, append = TRUE)
-    # })
-    # doi2bib(dois.combined, file = paste0("results/", outFileName, "_", Sys.Date(),".bib"), quiet = FALSE)
-    
-    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, 
-                       searchStringsList)
-    #}
-    if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
-      queryResults.wok.unique <-   queryResults.wok
-      nonPeerReviewed.wok <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
-      queryResults.wok.unique[!document_type %in% nonPeerReviewed.wok, ]
-      prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
-    }
-    # these if statements should always be FALSE
-    # if (nrow(queryResults.scopus) == 0 ) {
-    #   print(paste0("SCOPUS results for query ", queryNum, ", query: " , query.scopus, " are empty"))
-    # }
-    # if (nrow(queryResults.wok) == 0 ) {
-    #   print(paste0("WOK results for query ", queryNum, ", query: " , query.wok, " are empty"))
   }
+  # walk(urls.combined, ~ {
+  # try(curl(., handle = h)) %>%
+  #   readLines(warn = FALSE) %>%
+  #   write(file = outFile.bib, append = TRUE)
+  # })
+  # doi2bib(dois.combined, file = paste0("results/", outFileName, "_", Sys.Date(),".bib"), quiet = FALSE)
   
-  
-  # function to return raw query search terms
-  # rawQuery added here to add a new column to the spreadsheet for its terms
-  rawQuerySearchTerms <- function(rawQuery) {
-    rawQuery <- gsub('  ', ' ', rawQuery, fixed = TRUE)
-    rawQuery <- gsub(' AND ', ', ', rawQuery, fixed = TRUE)
-    rawQuery <- gsub(' OR ', ', ', rawQuery, fixed = TRUE)
-    rawQuery <- gsub(' or ', ', ', rawQuery, fixed = TRUE) # added because somewhere an OR is being converted to or and I don't want to figure out where.
-    rawQuery <- gsub('(', '', rawQuery, fixed = TRUE)
-    rawQuery <- gsub(')', '', rawQuery, fixed = TRUE)
-    rawQuery <- as.character(strsplit(rawQuery, split = ", ", fixed = TRUE)[[1]])
-    rawQuery <- as.list(rawQuery)
-    # rawQuery <- gsub('{', '', rawQuery, fixed = TRUE)
-    # rawQuery <- gsub('}', '', rawQuery, fixed = TRUE)
-    rawQuery <- paste0(rawQuery, '"')
-    rawQuery <- paste0('"', rawQuery)
-    rawQuery <- paste0(rawQuery, collapse = ", ")
-    rawQuery <- paste0("c(", rawQuery)
-    rawQuery <- paste0(rawQuery, ")")
-    rawQuery <- gsub('\"\"', '\"', rawQuery)
-    rawQuery.name <- "searchStrings.baseQuery"
-    rawQueryList <- list(rawQuery.name, rawQuery)
-    return(rawQuery)
+  prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], rawQuery, queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, 
+                     searchStringsList)
+  #}
+  if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
+    queryResults.wok.unique <-   queryResults.wok
+    nonPeerReviewed.wok <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
+    queryResults.wok.unique[!document_type %in% nonPeerReviewed.wok, ]
+    prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
   }
-  
-  createBibtexEntry <- function(doiIn) {
-    # code originally from https://stackoverflow.com/questions/12193779/how-to-write-trycatch-in-r
-    out <- tryCatch(
-      {
-        # Just to highlight: if you want to use more than one 
-        # R expression in the "try" part then you'll have to 
-        # use curly brackets.
-        # 'tryCatch()' will return the last evaluated expression 
-        # in case the "try" part was completed successfully
-        
-        #      message("This is the 'try' part")
-        h <- new_handle()
-        handle_setheaders(h, "accept" = "application/x-bibtex")
-        urlIn <- paste0("https://doi.org/", doiIn)
-        temp <- paste0("curl(url = '", urlIn,"', handle = h)")
-        
-        con <- eval(parse(text = temp))
-        bibtemp <- readLines(con, warn = FALSE)
-        close(con)
-        return(bibtemp)
-        # print(bibtemp)
-        # close(con)
-        #     return(bibtemp)
-        # readLines(con=url, warn=FALSE) 
-        # The return value of `readLines()` is the actual value 
-        # that will be returned in case there is no condition 
-        # (e.g. warning or error). 
-        # You don't need to state the return value via `return()` as code 
-        # in the "try" part is not wrapped insided a function (unlike that
-        # for the condition handlers for warnings and error below)
-      },
-      error = function(cond) {
-        # message(paste("URL does not seem to exist:", url))
-        # message("Here's the original error message:")
-        # message(cond)
-        # Choose a return value in case of error
-        return("Rejected")
-      }
-      # warning = function(cond) {
-      #   message(paste("URL caused a warning:", url))
-      #   message("Here's the original warning message:")
-      #   message(cond)
-      #   # Choose a return value in case of warning
-      #   return(NULL)
-      # },
-      # finally = {
-      #   #   # NOTE:
-      #   #   # Here goes everything that should be executed at the end,
-      #   #   # regardless of success or error.
-      #   #   # If you want more than one expression to be executed, then you 
-      #   #   # need to wrap them in curly brackets ({...}); otherwise you could
-      #   #   # just have written 'finally=<expression>' 
-      #   #   message(paste("Processed URL:", url))
-      #   close(con)
-      # }
-    )    
-    return(out)
-  }
-  
-  doiToBibtex <- function(doiList, filename) {
-    #store all the bibtex entries to a file
-    require(curl)
-    file.create(filename)
-    #  urls.combined <- as.list(paste0("https://doi.org/", doilist$dois.combined))
-    for (j in 1:length(doiList$dois.combined)) {
+  # these if statements should always be FALSE
+  # if (nrow(queryResults.scopus) == 0 ) {
+  #   print(paste0("SCOPUS results for query ", queryNum, ", query: " , query.scopus, " are empty"))
+  # }
+  # if (nrow(queryResults.wok) == 0 ) {
+  #   print(paste0("WOK results for query ", queryNum, ", query: " , query.wok, " are empty"))
+}
+
+
+# function to return raw query search terms
+# rawQuery added here to add a new column to the spreadsheet for its terms
+rawQuerySearchTerms <- function(rawQuery) {
+  rawQuery <- gsub('  ', ' ', rawQuery, fixed = TRUE)
+  rawQuery <- gsub(' AND ', ', ', rawQuery, fixed = TRUE)
+  rawQuery <- gsub(' OR ', ', ', rawQuery, fixed = TRUE)
+  rawQuery <- gsub(' or ', ', ', rawQuery, fixed = TRUE) # added because somewhere an OR is being converted to or and I don't want to figure out where.
+  rawQuery <- gsub('(', '', rawQuery, fixed = TRUE)
+  rawQuery <- gsub(')', '', rawQuery, fixed = TRUE)
+  rawQuery <- as.character(strsplit(rawQuery, split = ", ", fixed = TRUE)[[1]])
+  rawQuery <- as.list(rawQuery)
+  # rawQuery <- gsub('{', '', rawQuery, fixed = TRUE)
+  # rawQuery <- gsub('}', '', rawQuery, fixed = TRUE)
+  rawQuery <- paste0(rawQuery, '"')
+  rawQuery <- paste0('"', rawQuery)
+  rawQuery <- paste0(rawQuery, collapse = ", ")
+  rawQuery <- paste0("c(", rawQuery)
+  rawQuery <- paste0(rawQuery, ")")
+  rawQuery <- gsub('\"\"', '\"', rawQuery)
+  rawQuery.name <- "searchStrings.baseQuery"
+  rawQueryList <- list(rawQuery.name, rawQuery)
+  return(rawQuery)
+}
+
+createBibtexEntry <- function(doiIn) {
+  # code originally from https://stackoverflow.com/questions/12193779/how-to-write-trycatch-in-r
+  out <- tryCatch(
+    {
+      # Just to highlight: if you want to use more than one 
+      # R expression in the "try" part then you'll have to 
+      # use curly brackets.
+      # 'tryCatch()' will return the last evaluated expression 
+      # in case the "try" part was completed successfully
       
-      tempDOI <- doiList$dois.combined[j]
-      #    print(paste0("doi num :", j, ", doi: ", tempDOI))
-      bibtemp <- createBibtexEntry(tempDOI)
-      write(bibtemp, file = filename, append = TRUE)
-    }
-  }
-  
-  clusterSetup <- function(varList, libList, useCores) {
-    cl <- makeCluster(useCores,  outfile = "")
-    registerDoParallel(cl)
-    if (!missing(libList)) {
-      varList <- c(varList, "libList")
-    }
-    clusterExport(cl, varlist = c(varList))
-    clusterEvalQ(cl, sapply(libList, require, character.only = TRUE))
-    return(cl)
-  }
-  
-  # source of the DOI to Bibtex code is https://rdrr.io/github/wkmor1/doi2bib/src/R/doi2bib.r
-  #' Convert DOI to Bibtex
-  #'
-  #' Convert a digital object identifier (DOI) string into a bibtex entry using
-  #' the webservice \url{http://www.doi2bib.org}.
-  #'
-  #' @param ... One or more DOIs, as \code{character} strings. If arguments are
-  #'   named, names will replace default citekeys.
-  #' @param file an optional \code{character} string. If used, the bibtex
-  #'   references are sent to \code{file} rather than being returned.
-  #' @param append \code{logical}. Append results to file?
-  #' @param quiet \code{logical}. By default, bibtex references are printed to the
-  #'   console. By setting \code{quiet} to \code{TRUE}, this behaviour will be
-  #'   prevented.
-  #'
-  #' @return a \code{list}, returned invisibly, of bibtex references as
-  #'   \code{character} strings, as well as writing to file if \code{file} is
-  #'   specified.
-  #'
-  #' @importFrom httr accept content GET
-  #' @importFrom methods setGeneric setMethod signature
-  #' @importFrom xml2 xml_text xml_find_all
-  #'
-  #' @examples
-  #' doi2bib(Margules2000 = "10.1038/35012251")
-  #' doi2bib(Margules2000 = "10.1038/35012251",
-  #'         Myers2000    = "10.1038/35002501",
-  #'         Moilanen     = "978-0199547777")
-  #' @export
-  
-  setGeneric(
-    "doi2bib",
-    function(..., file, append = TRUE, quiet = FALSE) {
-      standardGeneric("doi2bib")
+      #      message("This is the 'try' part")
+      h <- new_handle()
+      handle_setheaders(h, "accept" = "application/x-bibtex")
+      urlIn <- paste0("https://doi.org/", doiIn)
+      temp <- paste0("curl(url = '", urlIn,"', handle = h)")
+      
+      con <- eval(parse(text = temp))
+      bibtemp <- readLines(con, warn = FALSE)
+      close(con)
+      return(bibtemp)
+      # print(bibtemp)
+      # close(con)
+      #     return(bibtemp)
+      # readLines(con=url, warn=FALSE) 
+      # The return value of `readLines()` is the actual value 
+      # that will be returned in case there is no condition 
+      # (e.g. warning or error). 
+      # You don't need to state the return value via `return()` as code 
+      # in the "try" part is not wrapped insided a function (unlike that
+      # for the condition handlers for warnings and error below)
     },
-    signature = signature("...")
-  )
-  
-  replace_citekeys <-
-    function(refs, nms) {
-      setNames(
-        mapply(
-          function(ref, nm) {
-            ifelse(
-              nchar(nm) < 1,
-              ref,
-              sub("([^\\{]+\\{)[^,]+", paste0("\\1", nm), ref)
-            )
-          },
-          refs,
-          nms,
-          SIMPLIFY = FALSE
-        ),
-        nms
-      )
+    error = function(cond) {
+      # message(paste("URL does not seem to exist:", url))
+      # message("Here's the original error message:")
+      # message(cond)
+      # Choose a return value in case of error
+      return("Rejected")
     }
-  
-  refs_to_file <-
-    function(refs, file, append) {
-      cat(paste(refs, collapse = "\n"), file = file, append = append)
-    }
-  
-  get_doi <-
-    function(doi) {
-      content(
-        GET(
-          url    = "http://www.doi2bib.org/",
-          config = accept("application/x-bibtex"),
-          path   = "doi2bib",
-          query  = list(id = doi)
-        ),
-        as = "text",
-        encoding = "UTF-8"
-      )
-    }
-  
-  #' get_isbn <-
-  #'   function(isbn)
-  #'     xml_text(
-  #'       xml_find_all(
-  #'         content(
-  #'           GET(
-  #'             url    = "http://lead.to/",
-  #'             path   = "amazon/en",
-  #'             query  = list(key = isbn, op = "bt")
-  #'           ),
-  #'           as =  "parsed",
-  #'           encoding = "UTF-8"
-  #'         ),
-  #'         "//div[contains(@class,'lef3em')]"
-  #'       )
-  #'     )
-  #' 
-  #' get_identifier <- function(id) {
-  #'   if (grepl("/", id, fixed = TRUE)) get_doi(id)
-  #'   else get_isbn(id)
-  #' }
-  #' 
-  #' #'@describeIn doi2bib Convert DOI to bibtex
-  #' setMethod(
-  #'   "doi2bib",
-  #'   "character",
-  #'   function(..., file, append, quiet) {
-  #'     
-  #'     stopifnot(missing(file) || is.character(file))
-  #'     stopifnot(is.logical(quiet))
-  #'     stopifnot(has_connection())
-  #'     
-  #'     dois <- c(...)
-  #'     
-  #'     refs <- lapply(dois, get_identifier)
-  #'     
-  #'     nms <- names(dois)
-  #'     
-  #'     if (!is.null(nms)) {
-  #'       refs <- replace_citekeys(refs, nms)
-  #'     }
-  #'     
-  #'     if (!quiet) message(paste(refs, collapse = "\n"))
-  #'     
-  #'     if (!missing(file)) {
-  #'       refs_to_file(refs, file, append)
-  #'     }
-  #'     
-  #'     invisible(refs)
-  #'     
-  #'   }
-  #' )
-  
-  
-  
+    # warning = function(cond) {
+    #   message(paste("URL caused a warning:", url))
+    #   message("Here's the original warning message:")
+    #   message(cond)
+    #   # Choose a return value in case of warning
+    #   return(NULL)
+    # },
+    # finally = {
+    #   #   # NOTE:
+    #   #   # Here goes everything that should be executed at the end,
+    #   #   # regardless of success or error.
+    #   #   # If you want more than one expression to be executed, then you 
+    #   #   # need to wrap them in curly brackets ({...}); otherwise you could
+    #   #   # just have written 'finally=<expression>' 
+    #   #   message(paste("Processed URL:", url))
+    #   close(con)
+    # }
+  )    
+  return(out)
+}
+
+doiToBibtex <- function(doiList, filename) {
+  #store all the bibtex entries to a file
+  require(curl)
+  file.create(filename)
+  #  urls.combined <- as.list(paste0("https://doi.org/", doilist$dois.combined))
+  for (j in 1:length(doiList$dois.combined)) {
+    
+    tempDOI <- doiList$dois.combined[j]
+    #    print(paste0("doi num :", j, ", doi: ", tempDOI))
+    bibtemp <- createBibtexEntry(tempDOI)
+    write(bibtemp, file = filename, append = TRUE)
+  }
+}
+
+clusterSetup <- function(varList, libList, useCores) {
+  cl <- makeCluster(useCores,  outfile = "")
+  registerDoParallel(cl)
+  if (!missing(libList)) {
+    varList <- c(varList, "libList")
+  }
+  clusterExport(cl, varlist = c(varList))
+  clusterEvalQ(cl, sapply(libList, require, character.only = TRUE))
+  return(cl)
+}
+
+# source of the DOI to Bibtex code is https://rdrr.io/github/wkmor1/doi2bib/src/R/doi2bib.r
+#' Convert DOI to Bibtex
+#'
+#' Convert a digital object identifier (DOI) string into a bibtex entry using
+#' the webservice \url{http://www.doi2bib.org}.
+#'
+#' @param ... One or more DOIs, as \code{character} strings. If arguments are
+#'   named, names will replace default citekeys.
+#' @param file an optional \code{character} string. If used, the bibtex
+#'   references are sent to \code{file} rather than being returned.
+#' @param append \code{logical}. Append results to file?
+#' @param quiet \code{logical}. By default, bibtex references are printed to the
+#'   console. By setting \code{quiet} to \code{TRUE}, this behaviour will be
+#'   prevented.
+#'
+#' @return a \code{list}, returned invisibly, of bibtex references as
+#'   \code{character} strings, as well as writing to file if \code{file} is
+#'   specified.
+#'
+#' @importFrom httr accept content GET
+#' @importFrom methods setGeneric setMethod signature
+#' @importFrom xml2 xml_text xml_find_all
+#'
+#' @examples
+#' doi2bib(Margules2000 = "10.1038/35012251")
+#' doi2bib(Margules2000 = "10.1038/35012251",
+#'         Myers2000    = "10.1038/35002501",
+#'         Moilanen     = "978-0199547777")
+#' @export
+
+setGeneric(
+  "doi2bib",
+  function(..., file, append = TRUE, quiet = FALSE) {
+    standardGeneric("doi2bib")
+  },
+  signature = signature("...")
+)
+
+replace_citekeys <-
+  function(refs, nms) {
+    setNames(
+      mapply(
+        function(ref, nm) {
+          ifelse(
+            nchar(nm) < 1,
+            ref,
+            sub("([^\\{]+\\{)[^,]+", paste0("\\1", nm), ref)
+          )
+        },
+        refs,
+        nms,
+        SIMPLIFY = FALSE
+      ),
+      nms
+    )
+  }
+
+refs_to_file <-
+  function(refs, file, append) {
+    cat(paste(refs, collapse = "\n"), file = file, append = append)
+  }
+
+get_doi <-
+  function(doi) {
+    content(
+      GET(
+        url    = "http://www.doi2bib.org/",
+        config = accept("application/x-bibtex"),
+        path   = "doi2bib",
+        query  = list(id = doi)
+      ),
+      as = "text",
+      encoding = "UTF-8"
+    )
+  }
+
+#' get_isbn <-
+#'   function(isbn)
+#'     xml_text(
+#'       xml_find_all(
+#'         content(
+#'           GET(
+#'             url    = "http://lead.to/",
+#'             path   = "amazon/en",
+#'             query  = list(key = isbn, op = "bt")
+#'           ),
+#'           as =  "parsed",
+#'           encoding = "UTF-8"
+#'         ),
+#'         "//div[contains(@class,'lef3em')]"
+#'       )
+#'     )
+#' 
+#' get_identifier <- function(id) {
+#'   if (grepl("/", id, fixed = TRUE)) get_doi(id)
+#'   else get_isbn(id)
+#' }
+#' 
+#' #'@describeIn doi2bib Convert DOI to bibtex
+#' setMethod(
+#'   "doi2bib",
+#'   "character",
+#'   function(..., file, append, quiet) {
+#'     
+#'     stopifnot(missing(file) || is.character(file))
+#'     stopifnot(is.logical(quiet))
+#'     stopifnot(has_connection())
+#'     
+#'     dois <- c(...)
+#'     
+#'     refs <- lapply(dois, get_identifier)
+#'     
+#'     nms <- names(dois)
+#'     
+#'     if (!is.null(nms)) {
+#'       refs <- replace_citekeys(refs, nms)
+#'     }
+#'     
+#'     if (!quiet) message(paste(refs, collapse = "\n"))
+#'     
+#'     if (!missing(file)) {
+#'       refs_to_file(refs, file, append)
+#'     }
+#'     
+#'     invisible(refs)
+#'     
+#'   }
+#' )
+
+
