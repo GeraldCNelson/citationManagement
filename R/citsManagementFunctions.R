@@ -89,7 +89,7 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
   
   removeOldVersions(outName, destDir)
   sprintf("\nWriting the rds for %s to %s ", outName, destDir)
-  # print(proc.time())
+  # writeLines(proc.time())
   # next line removes any key left in the inDT data table; this may be an issue if a df is used
   # data.table::setkey(outName, NULL)
   outFile <- paste(destDir, "/", outName, "_", Sys.Date(), ".RDS", sep = "")
@@ -104,7 +104,7 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
   # fileDoc <- rbind(fileDoc, fileDocUpdate)
   # write.csv(fileDoc, paste(fileloc("mData"), "fileDocumentation.csv", sep = "/"), row.names = FALSE)
   #
-  # #print(proc.time())
+  # #writeLines(proc.time())
   # if (nrow(inDT.scopus) > 75000) {
   #   sprintf("\nThe number of rows in the SCOPUS data set, %s, is greater than 50,000. Not writing xlsx or csv", nrow(inDT.scopus))
   #   writeFiles <- writeFiles[!writeFiles %in% c("xlsx")]
@@ -204,7 +204,7 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
     xcelOutFileName = paste(destDir, "/", longName, "_", Sys.Date(), ".xlsx", sep = "") # added longName functionality June 20, 2018
     openxlsx::saveWorkbook(wbGeneral, xcelOutFileName, overwrite = TRUE)
     #   cat("\nDone writing the xlsx for ", outName, sep = "")
-    #  print(proc.time())
+    #  writeLines(proc.time())
   }
 }
 
@@ -220,7 +220,7 @@ removeOldVersions <- function(fileShortName,dir) {
            value = TRUE,
            perl = TRUE)
     if (length(oldVersionList) > 0) {
-      #      print(oldVersionList)
+      #      writeLines(oldVersionList)
       file.remove(paste(dir, oldVersionList, sep = "/"))
     }
   }
@@ -284,8 +284,8 @@ readinWOK <- function(query) {
     j <- fromJSON(jsonResp)
     QueryID  <- j$QueryResult$QueryID
     nrResults <- j$QueryResult$RecordsFound
-    print(paste(nrResults, 'results from WOK query ID ', QueryID))
-    #    print(paste0("QueryID: ", QueryID))
+    writeLines(paste(nrResults, 'results from WOK query ID ', QueryID))
+    #    writeLines(paste0("QueryID: ", QueryID))
     if (nrResults > 5000) stop("Number of WOK records greater than 5000")
     # if successful, load the initial download into queryResults
     # jData <- as.data.table(flatten(j$Data))
@@ -299,7 +299,7 @@ readinWOK <- function(query) {
   # browser()
   while (notFinished) {
     step = step + 1
-    print(step)
+    writeLines(step)
     if (nrResults < (firstRecord + count) & !nrResults == -1) {
       count = nrResults - firstRecord
     }
@@ -315,7 +315,7 @@ readinWOK <- function(query) {
     queryResults <- rbind(queryResults, jData, fill = TRUE)
     if (nrResults <= firstRecord + count) {
       notFinished = FALSE
-      print('Done with WOK')
+      writeLines('Done with WOK\n\n')
     }else{
       #      queryIdMode = TRUE
       firstRecord = firstRecord + count
@@ -370,29 +370,32 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     j <- fromJSON(jsonResp)
     
     if (!is.data.frame(j$Data)) { # a loop to skip over set of 100 records that has an internal server error
-      print(paste("j$Data is not a data frame. Nearest record is ", firstRecord))
+      writeLines(paste("j$Data is not a data frame. Nearest record is ", firstRecord))
     } else {
       j[["Data"]][["UT"]] <- NULL
       jData <- as.data.table(flatten(j$Data))
       if ("Title.Title"  %in%  names(jData)) {keepListCol <- keepListCol.long} else {keepListCol <- keepListCol.short}
-      #      print(sort(names(jData)))
+      #      writeLines(sort(names(jData)))
       setnames(jData, old = keepListCol, new = newNames, skip_absent = TRUE)
       setnames(jData, old = "BookAuthors", new = "bookAuthors", skip_absent = TRUE)
       setnames(jData, old = "Issue", new = "issue", skip_absent = TRUE)
       setnames(jData, old = "Published.BiblioDate", new = "date", skip_absent = TRUE)
       if (!"bookAuthors" %in% names(jData)) jData[, bookAuthors := "NULL"] # to deal with jData files that don't have any books
       if (!"isbn" %in% names(jData)) jData[, isbn := "NULL"] # to deal with jData files that don't have any books
-      # print("names of jData 1")
-      # print(names(jData))
+      # writeLines("names of jData 1")
+      # writeLines(names(jData))
       # 
-      # print("keeplistCol")
-      # print(keepListCol)
-      # print("setDiff")
-      # print(setdiff(names(jData), newNames))
-      #     print("names of jData 2")
-      #     print(names(jData))
+      # writeLines("keeplistCol")
+      # writeLines(keepListCol)
+      # writeLines("setDiff")
+      # writeLines(setdiff(names(jData), newNames))
+      #     writeLines("names of jData 2")
+      #     writeLines(names(jData))
       
-      #   print(sort(names(jData)))
+      #   writeLines(sort(names(jData)))
+      if (!"issue" %in% names(jData)) jData[, issue := "None"]
+      if (!"date" %in% names(jData)) jData[, date := "None"]
+      
       jData <- jData[, (newNames), with = FALSE]
       #      jData[, setdiff(names(jData), keepListCol) := NULL]
       jData[, ] <- lapply(jData[, ], as.character)
@@ -401,7 +404,7 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
     }
     if (nrResults <= firstRecord + count) {
       notFinished = FALSE
-      print('Done with WOK')
+      writeLines('Done with WOK')
     }else{
       #      queryIdMode = TRUE
       firstRecord = firstRecord + count
@@ -433,7 +436,7 @@ constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString,
   # query.scopus <- paste0(query.scopus.begin, query.scopus.end)
   query.scopus <- sprintf('%s AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND NOT (%s)', yearCoverage.scopus, rawQuery, rawQuery, CCSearchString, CCSearchString, climateMitigation)
   query.scopus <- replace_curly_quote(query.scopus)
-  print(query.scopus)
+  writeLines(query.scopus)
   return(query.scopus)
 }
 
@@ -448,17 +451,17 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
     query.wok <- gsub("AND NOT", "NOT", query.wok)
     
     query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString, climateMitigation)
-    print(paste( workingText, queries$queryNumber[i], ": output name:", queries$outFileName[i]))
-    print(paste0("query.wok: ", query.wok))
+    writeLines(paste( workingText, queries$queryNumber[i], ": output name:", queries$outFileName[i]))
+    writeLines(paste0("query.wok: ", query.wok))
     
     response.wok <- httr::GET(url.wok, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
                               query = list(databaseId = 'WOK', usrQuery = query.wok, count = 1, firstRecord = 1))
     suppressMessages(jsonResp <- content(response.wok, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
-    if (!is.null(j$code)) print(paste0("This query is malformed: ", query.wok))
+    if (!is.null(j$code)) writeLines(paste0("This query is malformed: ", query.wok))
     QueryID.wok  <- j$QueryResult$QueryID
     nrResults.wok <- j$QueryResult$RecordsFound
-    print(paste0("query.scopus: ", query.scopus))
+    writeLines(paste0("query.scopus: ", query.scopus))
     response.scopus = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "STANDARD"))
     nrResults.scopus <- response.scopus$total_results
     QueryID.scopus <- NA
@@ -467,7 +470,7 @@ getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchS
     queryInfo <- rbind(queryInfo, newRow)
     Sys.sleep(0.4)
   }
-  print("Done!")
+  writeLines("Done!")
   return(queryInfo)
 }
 
@@ -475,7 +478,7 @@ getScopusinfo <- function(queries, yearCoverage.scopus) {
   queryInfo <- data.table(query = character(), QueryID = numeric(), nrResults = (numeric()))
   workingText <- "Working ."
   for (i in 1:nrow(queries)) {
-    print(workingText)
+    writeLines(workingText)
     rawQuery <- queries[i, query]
     query <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString)
     
@@ -488,7 +491,7 @@ getScopusinfo <- function(queries, yearCoverage.scopus) {
     Sys.sleep(0.4)
     workingText <- paste0(workingText, ".")
   }
-  print("Done getting Scopus info!")
+  writeLines("Done getting Scopus info!")
   return(queryInfo)
 }
 
@@ -526,7 +529,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   nrResults <- response$total_results
   if (nrResults > 5000) stop("Number of SCOPUS records greater than 5000")
   if (nrResults == 0) {
-    print("No references for this query")
+    writeLines("No references for this query")
   }else{
     cat(green(query)) # display scopus query in green
     response = scopus_search(query = query, max_count = nrResults, count = 25,  start = 0, verbose = FALSE, view = c("COMPLETE"))
@@ -582,19 +585,19 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     
     #queryResults
     
-    #    print(unique(queryResults$document_type))
-    #    print(paste0("searchStrings.names: ", searchStrings.names))
+    #    writeLines(unique(queryResults$document_type))
+    #    writeLines(paste0("searchStrings.names: ", searchStrings.names))
     
     # remove searchStrings.region to deal with the 'global' problem separately
     searchStrings <- searchStrings[!searchStrings %in% "searchStrings.regions"]
     searchStringsList <- searchStringsList[!searchStringName %in% "searchStrings.regions",]
     searchStrings.names <-  searchStrings.names[!searchStrings.names %in% "regions"]
     for (i in 1:length(searchStrings)) {
-      #      print(paste0("searchString: ", i, ", ", searchStrings[i]))
-      #     print(searchStringsList[,.SD[i]]$searchString)
-      #       print(searchStringsList[,.SD[i]]$searchString)
+      #      writeLines(paste0("searchString: ", i, ", ", searchStrings[i]))
+      #     writeLines(searchStringsList[,.SD[i]]$searchString)
+      #       writeLines(searchStringsList[,.SD[i]]$searchString)
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
-      #     print(paste0("searchSt: ", searchSt))
+      #     writeLines(paste0("searchSt: ", searchSt))
       searchSt <- replace_curly_quote(searchSt)
       for (j in searchSt) {
         # grepl and startsWith return a logical vector
@@ -605,7 +608,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
         #            grepl(j, x, ignore.case = TRUE, perl = FALSE)
         #            })), .SDcols = searchCols]
         # #         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE))), .SDcols = searchCols]
-        #          #         print(paste("jnew ",  jnew))
+        #          #         writeLines(paste("jnew ",  jnew))
         #        } else {
         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchColsTemp]
         #       }
@@ -639,8 +642,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     for (i in searchStrings.names) {
       queryResults[, (i) := gsub(paste0("None, "), "", get(i))]
     }
-    #    print(sort(names(queryResults)))
-    #    print(sort(searchStrings.names))
+    #    writeLines(sort(names(queryResults)))
+    #    writeLines(sort(searchStrings.names))
     queryResults[, (searchStrings.names) := (lapply(.SD, function(x) {
       sapply(x, function(y) paste(sort(trimws(strsplit(y, ',')[[1]])), collapse = ', '))
     })), .SDcols = searchStrings.names]
@@ -705,12 +708,16 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
                      "notPeerRev", "timePeriod", "econ", "gender", "indigenous", "ethnicity", "adaptStrat", "climZones", "crpSystems", "nutrients", "fibre", "pestsPlants", 
                      "pestsAnimals", "cropModels", "engLevel", "adapType", "adapProfile", "adapStage", "adapBeneficiary", "adapLimits", "adapConstraints", "extentCC", 
                      "biotech", "breadbaskets", "comments")
+  if (!"issue" %in% names(queryResults)) queryResults[, issue := "None"]
+  if (!"date" %in% names(queryResults)) queryResults[, date := "None"]
+  if (!"eIssn" %in% names(queryResults)) queryResults[, eIssn := "None"]
+  
   setcolorder(queryResults, neworder = queryColOrder)
   
   write_rds(queryResults, "queryResultsAfter.RDS")
   
   
-  print('Done with SCOPUS')
+  writeLines('Done with SCOPUS\n')
   return(queryResults)
 }
 
@@ -784,7 +791,7 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
   
   removeOldVersions(outName, destDir)
   sprintf("\nWriting the rds for %s to %s ", outName, destDir)
-  # print(proc.time())
+  # writeLines(proc.time())
   # next line removes any key left in the inDT data table; this may be an issue if a df is used
   data.table::setkey(inDT, NULL)
   outFile <- paste(destDir, "/", outName, "_", Sys.Date(), ".rds", sep = "")
@@ -799,7 +806,7 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
   # fileDoc <- rbind(fileDoc, fileDocUpdate)
   # write.csv(fileDoc, paste(fileloc("mData"), "fileDocumentation.csv", sep = "/"), row.names = FALSE)
   #
-  # #print(proc.time())
+  # #writeLines(proc.time())
   if (missing(writeFiles)) {writeFiles = "xlsx"}
   if (nrow(inDT) > 75000) {
     sprintf("\nThe number of rows in the data, %s, is greater than 50,000. Not writing xlsx or csv", nrow(inDT))
@@ -847,7 +854,7 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
     xcelOutFileName = paste(destDir, "/", longName, "_", Sys.Date(), ".xlsx", sep = "") # added longName functionality June 20, 2018
     openxlsx::saveWorkbook(wbGeneral, xcelOutFileName, overwrite = TRUE)
     #   cat("\nDone writing the xlsx for ", outName, sep = "")
-    #  print(proc.time())
+    #  writeLines(proc.time())
   }
 }
 
@@ -855,20 +862,20 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   rawQuery <- queries[queryNumber %in% queryNum, rawQuery]
   rawQuery <- gsub("\\\\", "", rawQuery)
   outFileName <- queries[queryNumber %in% queryNum, fileName]
-  print(paste0("working on query ", queryNum, " filename: ", outFileName))
+  writeLines(paste0("Working on query ", queryNum, " filename: ", outFileName))
   query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString, climateMitigation) 
   query.wok <- gsub("AND NOT", "NOT", query.wok)
   QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
   nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
   queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
-  print(paste0("queryResults.wok count: ", nrow(queryResults.wok)))
+  writeLines(paste0("queryResults.wok count: ", nrow(queryResults.wok)))
   
   nrResults.scopus <- queries[queryNumber %in% queryNum, nrResults.scopus] # for SCOPUS
   if (nrResults.scopus > 5000) {
-    print(paste0("Number of results for scopus greater than 5000 for query ", queryNum, ". Skipping it."))
+    writeLines(paste0("Number of results for scopus greater than 5000 for query ", queryNum, ". Skipping it."))
   } 
   if (nrResults.scopus == 0) {
-    print(paste0("No results for scopus for query ", queryNum, ". Skipping it."))
+    writeLines(paste0("No results for scopus for query ", queryNum, ". Skipping it."))
     queryResults.scopus <- data.table(NULL)
   }
   
@@ -883,13 +890,13 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   }
   # process if both results have content
   doi.wok <- sort(queryResults.wok$doi)
-  # print(doi.wok)
-  # print(nrow(queryResults.wok))
-  # print(nrow(queryResults.scopus))
+  # writeLines(doi.wok)
+  # writeLines(nrow(queryResults.wok))
+  # writeLines(nrow(queryResults.scopus))
   if (!nrow(queryResults.scopus) == 0 & !nrow(queryResults.wok) == 0 & !is.null(doi.wok)) {
-    print(paste0("doi.wok count: ", length(doi.wok))) # doi.wok is a character variable
+    writeLines(paste0("doi.wok count: ", length(doi.wok))) # doi.wok is a character variable
     doi.scopus <- sort(queryResults.scopus$doi)
-    print(paste0("doi.scopus count: ", length(doi.scopus))) # doi.wok is a character variable
+    writeLines(paste0("doi.scopus count: ", length(doi.scopus))) # doi.wok is a character variable
     
     doi.common <- doi.wok[doi.wok %in% doi.scopus]
     doi.unique.wok <- doi.wok[!doi.wok %in% doi.scopus]
@@ -908,7 +915,7 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
     queryResults.wok.unique <- queryResults.wok.unique[!title %in% temp$rejectTitle,]
     dois.combined <- unique(c(doi.unique.wok, doi.unique.wok))
     dois.combined <<- dois.combined[!is.null(dois.combined)]
-    print(paste("csv out: ", paste0("results/dois/combinedDOIs_/", outFileName, "_", Sys.Date(),".csv")))
+    writeLines(paste("csv out: ", paste0("results/dois/combinedDOIs_/", outFileName, "_", Sys.Date(),".csv")))
     
     write_csv(as.data.table(dois.combined), paste0("results/dois/combinedDOIs_", outFileName, "_", Sys.Date(),".csv"))
     
@@ -933,10 +940,10 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   }
   # these if statements should always be FALSE
   # if (nrow(queryResults.scopus) == 0 ) {
-  #   print(paste0("SCOPUS results for query ", queryNum, ", query: " , query.scopus, " are empty"))
+  #   writeLines(paste0("SCOPUS results for query ", queryNum, ", query: " , query.scopus, " are empty"))
   # }
   # if (nrow(queryResults.wok) == 0 ) {
-  #   print(paste0("WOK results for query ", queryNum, ", query: " , query.wok, " are empty"))
+  #   writeLines(paste0("WOK results for query ", queryNum, ", query: " , query.wok, " are empty"))
 }
 
 
@@ -984,7 +991,7 @@ createBibtexEntry <- function(doiIn) {
       bibtemp <- readLines(con, warn = FALSE)
       close(con)
       return(bibtemp)
-      # print(bibtemp)
+      # writeLines(bibtemp)
       # close(con)
       #     return(bibtemp)
       # readLines(con=url, warn=FALSE) 
@@ -1031,7 +1038,7 @@ doiToBibtex <- function(doiList, filename) {
   for (j in 1:length(doiList$dois.combined)) {
     
     tempDOI <- doiList$dois.combined[j]
-    #    print(paste0("doi num :", j, ", doi: ", tempDOI))
+    #    writeLines(paste0("doi num :", j, ", doi: ", tempDOI))
     bibtemp <- createBibtexEntry(tempDOI)
     write(bibtemp, file = filename, append = TRUE)
   }
