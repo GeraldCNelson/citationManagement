@@ -9,6 +9,9 @@
 # WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 # or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
 # for more details at http://www.gnu.org/licenses/.
+
+#This file is used in conjunction with readinQueries.R and is sourced from there.
+
 library(readxl)
 library(data.table)
 library(openxlsx)
@@ -55,8 +58,7 @@ shortNames.countries <- c("Syria", "Ivory Coast", "Laos", "Libya", "South Korea"
 countriesToRemove <- c("Anguilla", "Åland Islands", "Albania", "Andorra", "Netherlands Antilles", "Northern Mariana Islands", "Bonaire, Sint Eustatius and Saba", "Saint Barthélemy", "Bouvet Island", 
                        "Cocos (Keeling) Islands", "Christmas Island", "Guernsey", "Gibraltar", "Heard Island and McDonald Islands", "Isle of Man", "British Indian Ocean Territory",
                        "Mayotte", "Norfolk Island", "South Georgia and The South Sandwich Islands", "Saint Helena, Ascension and Tristan da Cunha", "Svalbard and Jan Mayen", 
-                       "San Marino", "Saint Pierre and Miquelon", "Macao", "Saint Martin (French part)",  "Sint Maarten (Dutch part)", "Saint Vincent and The Grenadines",
-                       "Wallis and Futuna", "Tokelau")
+                       "San Marino", "Saint Pierre and Miquelon", "Macao", "Saint Martin (French part)",  "Sint Maarten (Dutch part)", "Saint Vincent and The Grenadines", "Wallis and Futuna", "Tokelau")
 library(readr)
 abstractStringToDelete <- read_lines("data-raw/countryStringsToDelete.txt") # used to eliminate from the .temp version of the abstract column words like anomalies that include mali in them.
 abstractStringToDelete <- paste( abstractStringToDelete, collapse = "|")
@@ -79,7 +81,7 @@ searchStringsList <- rbind(list("searchStrings.countries", list(searchStrings.co
 
 #' Title cleanupRefFiles - remove old versions and save rds and xlsx or csv versions of the file
 #' @param inDT - name of the data table or frame to be written out
-#' @param outName - short name of the file to be written out
+#' @param outName - short name of the file to be written outs
 #' @param destDir - directory where the cleanup takes place
 #' @param writeFiles - format to use for writing output in addition to RDS
 #' @desc brief description of the contents of the file
@@ -89,10 +91,7 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
   
   removeOldVersions(outName, destDir)
   sprintf("\nWriting the rds for %s to %s ", outName, destDir)
-  # writeLines(proc.time())
-  # next line removes any key left in the inDT data table; this may be an issue if a df is used
-  # data.table::setkey(outName, NULL)
-  outFile <- paste(destDir, "/", outName, "_", Sys.Date(), ".RDS", sep = "")
+    outFile <- paste(destDir, "/", outName, "_", Sys.Date(), ".RDS", sep = "")
   #saveRDS(inDT, file = outFile)
   
   # # update files documentation -----
@@ -163,7 +162,7 @@ cleanupRefFiles <- function(metadata, inDT.scopus, inDT.wok, outName, destDir, w
     
     # set column widths here
     # column numbers in WoS/SCOPUS files for title, publicationName, and abstract 
-    colNums.scopus <- c(match("title",names(inDT.scopus)), match("publicationName",names(inDT.scopus)), match("abstract",names(inDT.scopus)))
+    colNums.scopus <- c(match("title",names(inDT.scopus)), match("publicationName",names(inDT.scopus)), match("description",names(inDT.scopus)))
     colNums.wok <- c(match("title", names(inDT.wok)), match("publicationName",names(inDT.wok)))
     openxlsx::setColWidths(
       wbGeneral, sheet = "Metadata", cols = 1:2 , widths = c(20,70))
@@ -242,7 +241,8 @@ removeOldVersions <- function(fileShortName,dir) {
 readinWOK <- function(query) {
   query <- gsub("\\\\", "", query)
   firstRecord <- 1
-  nrResults <- -1
+  #  nrResults <- -1
+  
   queryID = 1
   count <- 100
   notFinished = TRUE
@@ -266,8 +266,7 @@ readinWOK <- function(query) {
   
   newNames <- c("title","authors","bookAuthors", "publicationName", "pageRange", 
                 "volume","issue", "date", "year", 
-                "doi", "eIssn", "document_type", "keywords")
-  
+                "doi", "eIssn",  "keywords")
   
   # response.wok <- httr::GET(url, accept_xml(), httr::add_headers( `X-APIKey` = wosliteKey),
   #                           query = list(databaseId = 'WOK', usrQuery = query.wok, count = 10, firstRecord = 1))
@@ -277,8 +276,8 @@ readinWOK <- function(query) {
   # 
   # do some testing first and get the ID for this query
   
-  {response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
-                         query = list(databaseId = 'WOK', usrQuery = query, count = 1, firstRecord = 1))
+  {
+    response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey), query = list(databaseId = 'WOK', usrQuery = query, count = 1, firstRecord = 1))
     stop_for_status(response, task = "bad http status")
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
@@ -286,25 +285,24 @@ readinWOK <- function(query) {
     nrResults <- j$QueryResult$RecordsFound
     writeLines(paste(nrResults, 'results from WOK query ID ', QueryID))
     #    writeLines(paste0("QueryID: ", QueryID))
-    if (nrResults > 5000) stop("Number of WOK records greater than 5000")
+    if (nrResults > maxQueries) stop(paste0("Number of WOK records greater than maximum queries allowed - ", maxQueries))
     # if successful, load the initial download into queryResults
-    # jData <- as.data.table(flatten(j$Data))
-    # jData[, setdiff(names(jData), keepListCol) := NULL]
-    # jData[, ] <- lapply(jData[, ], as.character)
-    # queryResults <- rbind(queryResults, jData, fill = TRUE)
+    jData <- as.data.table(flatten(j$Data))
+    jData[, setdiff(names(jData), keepListCol) := NULL]
+    jData[, ] <- lapply(jData[, ], as.character)
+    queryResults <- rbind(queryResults, jData, fill = TRUE)
+    # xxxxxxx   
     url = paste0('https://api.clarivate.com/api/woslite/query/', QueryID, "/") # get data from the specific query
   }
-  
+  browser()
   step = 0
-  # browser()
   while (notFinished) {
     step = step + 1
     writeLines(step)
     if (nrResults < (firstRecord + count) & !nrResults == -1) {
       count = nrResults - firstRecord
     }
-    response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
-                          query = list(databaseId = 'WOK', usrQuery = query, count = count, firstRecord = firstRecord))
+    response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey), query = list(databaseId = 'WOK', usrQuery = query, count = count, firstRecord = firstRecord))
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
     QueryID  <- j$QueryResult$QueryID
@@ -315,7 +313,7 @@ readinWOK <- function(query) {
     queryResults <- rbind(queryResults, jData, fill = TRUE)
     if (nrResults <= firstRecord + count) {
       notFinished = FALSE
-      writeLines('Done with WOK\n\n')
+      writeLines('Done getting WOK results.\n\n')
     }else{
       #      queryIdMode = TRUE
       firstRecord = firstRecord + count
@@ -328,6 +326,7 @@ readinWOK <- function(query) {
 
 # readin WOK function using a queryID
 readinWOKWithQueryID <- function(query, QueryID, nrResults) {
+ #  browser()
   query <- gsub("\\\\", "", query)
   firstRecord <- 1
   # nrResults <- -1
@@ -335,41 +334,23 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
   count <- 100
   notFinished = TRUE
   url <- paste0('https://api.clarivate.com/api/woslite/query/', QueryID)
-  # queryResults.complete <- data.table(UT=character(), Keyword.Keywords=character(), Title.Title=character(),
-  #                            Doctype.Doctype=character(), Author.Authors=character(), Author.BookGroupAuthors=character(),
-  #                            Author.BookAuthors=character(), Source.Pages=character(), Source.Issue=character(),
-  #                            Source.SourceTitle=character(), Source.Volume=character(), Source.Published.BiblioDate=character(),
-  #                            Source.Published.BiblioYear=character(), Source.BookSeriesTitle=character(), Source.SupplementNumber=character(),
-  #                            Source.SpecialIssue=character(), Other.Identifier.Eissn=character(), Other.Identifier.Doi=character(),
-  #                            Other.Identifier.Issn=character(), Other.ResearcherID.Disclaimer=character(), Other.Identifier.Ids=character(),
-  #                            Other.Contributor.ResearcherID.Names=character(), Other.Contributor.ResearcherID.ResearcherIDs=character(),
-  #                            Other.Identifier.Eisbn=character(), Other.Identifier.article_no=character(), Other.Identifier.Isbn=character(),
-  #                            Other.Identifier.Parent_Book_Doi=character())
-  queryResults <- c(Title.Title = character(), Author.Authors = character(), Author.BookAuthors = character(), Source.SourceTitle = character(),  Source.Pages = character(), 
-                    Source.Volume = character(), Source.Issue = character(), Source.Published.BiblioDate = character(), Source.Published.BiblioYear = character(), 
-                    Other.Identifier.Doi = character(),Other.Identifier.Isbn = character(), Doctype.Doctype = character(), Keyword.Keywords = character())
-  keepListCol.long <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", 
-                        "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", 
-                        "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
-  keepListCol.short <- c("Title", "Authors", "BookAuthors", "SourceTitle",  "Pages", 
-                         "Volume", "Issue", "Published.BiblioDate", "Published.BiblioYear", 
-                         "Identifier.Doi","Identifier.Eissn", "Identifier.Isbn", "Doctype", "Keywords")
-  
+  queryResults <- c(Title.Title = character(), Author.Authors = character(), Author.BookAuthors = character(), Source.SourceTitle = character(),  Source.Pages = character(), Source.Volume = character(), Source.Issue = character(), Source.Published.BiblioDate = character(), Source.Published.BiblioYear = character(), Other.Identifier.Doi = character(),Other.Identifier.Isbn = character(), Doctype.Doctype = character(), Keyword.Keywords = character())
+  keepListCol.long <- c("Title.Title", "Author.Authors", "Author.BookAuthors", "Source.SourceTitle",  "Source.Pages", "Source.Volume", "Source.Issue", "Source.Published.BiblioDate", "Source.Published.BiblioYear", "Other.Identifier.Doi","Other.Identifier.Eissn", "Other.Identifier.Isbn", "Doctype.Doctype", "Keyword.Keywords")
+  keepListCol.short <- c("Title", "Authors", "BookAuthors", "SourceTitle", "Pages", "Volume", "Issue", "Published.BiblioDate", "Published.BiblioYear", "Identifier.Doi","Identifier.Eissn", "Identifier.Isbn", "Doctype", "Keywords")
   newNames <- c("title","authors","bookAuthors", "publicationName", "pageRange", 
                 "volume","issue", "date", "year", 
-                "doi", "eIssn", "isbn", "document_type", "keywords")
-  # browser()
+                "doi", "eIssn", "isbn", "doctype", "keywords")
   while (notFinished) {
+    #    browser()
     if (nrResults < (firstRecord + count) & !nrResults == -1) {
       count = nrResults - firstRecord
     }
-    response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
-                          query = list(databaseId = 'WOK', usrQuery = query, count = count, firstRecord = firstRecord))
+    response <- httr::GET(url, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey), query = list(databaseId = 'WOK', usrQuery = query, count = count, firstRecord = firstRecord))
     Sys.sleep(0.4)
     suppressMessages(jsonResp <- content(response, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
     
-    if (!is.data.frame(j$Data)) { # a loop to skip over set of 100 records that has an internal server error
+    if (!is.data.frame(j$Data)) { # loop to skip over 100 records that has an internal server error
       writeLines(paste("j$Data is not a data frame. Nearest record is ", firstRecord))
     } else {
       j[["Data"]][["UT"]] <- NULL
@@ -382,24 +363,11 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
       setnames(jData, old = "Published.BiblioDate", new = "date", skip_absent = TRUE)
       if (!"bookAuthors" %in% names(jData)) jData[, bookAuthors := "NULL"] # to deal with jData files that don't have any books
       if (!"isbn" %in% names(jData)) jData[, isbn := "NULL"] # to deal with jData files that don't have any books
-      # writeLines("names of jData 1")
-      # writeLines(names(jData))
-      # 
-      # writeLines("keeplistCol")
-      # writeLines(keepListCol)
-      # writeLines("setDiff")
-      # writeLines(setdiff(names(jData), newNames))
-      #     writeLines("names of jData 2")
-      #     writeLines(names(jData))
-      
-      #   writeLines(sort(names(jData)))
-      if (!"issue" %in% names(jData)) jData[, issue := "None"]
+       if (!"issue" %in% names(jData)) jData[, issue := "None"]
       if (!"date" %in% names(jData)) jData[, date := "None"]
       
       jData <- jData[, (newNames), with = FALSE]
-      #      jData[, setdiff(names(jData), keepListCol) := NULL]
       jData[, ] <- lapply(jData[, ], as.character)
-      
       queryResults <- rbind(queryResults, jData, fill = TRUE)
     }
     if (nrResults <= firstRecord + count) {
@@ -410,7 +378,6 @@ readinWOKWithQueryID <- function(query, QueryID, nrResults) {
       firstRecord = firstRecord + count
     }
   }
-  
   #  setnames(queryResults, old = keepListCol, new = newNames, skip_absent = TRUE)
   if (!"eIssn" %in% names(queryResults)) queryResults[, eIssn := NA] # added July 26 because of a search that didn't return an eIssn column
   queryResults[, eIssn := gsub("-", "", eIssn)]
@@ -431,40 +398,42 @@ constructQuery.WOK <- function(rawQuery, yearCoverage.wok, CCSearchString, clima
 }
 
 constructQuery.scopus <- function(rawQuery, yearCoverage.scopus, CCSearchString, climateMitigation) {
-  # query.scopus.begin <- paste0(yearCoverage.scopus, " AND TITLE-ABS (", rawQuery, ") OR AUTH-KEY (", rawQuery, ") ")
-  # query.scopus.end <- sprintf(' AND ((%s)) AND NOT (%s)', CCSearchString, climateMitigation)
-  # query.scopus <- paste0(query.scopus.begin, query.scopus.end)
-  query.scopus <- sprintf('%s AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND (TITLE-ABS(%s) OR AUTHKEY(%s)) AND NOT (%s)', yearCoverage.scopus, rawQuery, rawQuery, CCSearchString, CCSearchString, climateMitigation)
+  query.scopus <- sprintf('%s AND (TITLE-ABS-KEY(%s) OR AUTHKEY(%s)) AND (TITLE-ABS-KEY(%s) OR AUTHKEY(%s))', yearCoverage.scopus, rawQuery, rawQuery, CCSearchString, CCSearchString)
+  
   query.scopus <- replace_curly_quote(query.scopus)
   writeLines(query.scopus)
+   query.scopus <- gsub("\\\\", "", query.scopus)
   return(query.scopus)
 }
 
 getDBinfo <- function(queries, yearCoverage.wok, yearCoverage.scopus,  CCSearchString = CCSearchString) {
-  queryInfo <- data.table(sectionName = character(),fileName = character(), queryNumber = character(), rawQuery = character(), 
-                          QueryID.wok = numeric(),QueryID.scopus = numeric(), nrResults.wok = numeric(), nrResults.scopus = numeric(), query.wok = character(), query.scopus = character())
+  queryInfo <- data.table(sectionName = character(),fileName = character(), queryNumber = character(), rawQuery = character(), QueryID.wok = numeric(),QueryID.scopus = numeric(), nrResults.wok = numeric(), nrResults.scopus = numeric(), query.wok = character(), query.scopus = character())
   url.wok <- 'https://api.clarivate.com/api/woslite/'
   workingText <- "Working on query"
   for (i in 1:(nrow(queries))) {
     rawQuery <- queries[i, query]
+    
+    #working on WOK
     query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok = yearCoverage.wok, CCSearchString = CCSearchString, climateMitigation)
     query.wok <- gsub("AND NOT", "NOT", query.wok)
-    
-    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString, climateMitigation)
     writeLines(paste( workingText, queries$queryNumber[i], ": output name:", queries$outFileName[i]))
     writeLines(paste0("query.wok: ", query.wok))
-    
-    response.wok <- httr::GET(url.wok, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey),
-                              query = list(databaseId = 'WOK', usrQuery = query.wok, count = 1, firstRecord = 1))
+    response.wok <- httr::GET(url.wok, httr::add_headers(accept = 'application/json', `X-APIKey` = wosliteKey), query = list(databaseId = 'WOK', usrQuery = query.wok, count = 1, firstRecord = 1))
     suppressMessages(jsonResp <- content(response.wok, as =  "text")) # suppress messages to get rid of warning about defaulting to UTF-8
     j <- fromJSON(jsonResp)
-    if (!is.null(j$code)) writeLines(paste0("This query is malformed: ", query.wok))
+    if (!is.null(j$code)) {
+      print(paste0("j$code ", j$code))
+      writeLines(paste0("This query is malformed: ", query.wok))
+    }
     QueryID.wok  <- j$QueryResult$QueryID
     nrResults.wok <- j$QueryResult$RecordsFound
+    
+    #SCOPUS   
+    query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus = yearCoverage.scopus, CCSearchString = CCSearchString, climateMitigation)
     writeLines(paste0("query.scopus: ", query.scopus))
-    response.scopus = scopus_search(query = query.scopus, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "STANDARD"))
+    response.scopus = scopus_search(query = query.scopus, api_key = Scopus_api_key, insttoken = insttoken, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c("COMPLETE"))
     nrResults.scopus <- response.scopus$total_results
-    QueryID.scopus <- NA
+    QueryID.scopus <- NA 
     
     newRow <- list(queries$sectionName[i], queries$outFileName[i], queries$queryNumber[i], rawQuery, QueryID.wok, QueryID.scopus, nrResults.wok, nrResults.scopus, query.wok, query.scopus)
     queryInfo <- rbind(queryInfo, newRow)
@@ -496,15 +465,11 @@ getScopusinfo <- function(queries, yearCoverage.scopus) {
 }
 
 readinSCOPUS <- function(query, rawQuery, searchStringsList) {
-  keepListCol.content <- c("dc:title","dc:creator","prism:publicationName", # removed "prism:url","dc:identifier","eid",
-                           "prism:eIssn","prism:volume","prism:issueIdentifier","prism:coverDate", "prism:pageRange",
-                           "prism:doi","dc:description","citedby-count","prism:aggregationType",
-                           "subtypeDescription", "authkeywords")
-  keepListCol.content.newNames <- c("title","firstAuthor","publicationName", # removed "url","identifier","eid",
-                                    "eIssn","volume","issue","date", "pageRange",
-                                    "doi","abstract","citations","pubType",
-                                    "document_type", "author_keywords")
-  
+#  browser()
+  keepListCol.content <- 
+    c("dc:title", "prism:publicationName", "prism:aggregationType", "prism:isbn", "prism:issn", "prism:volume", "prism:issueIdentifier", "prism:pageRange", "prism:coverDate", "prism:doi", "dc:creator", "citedby-count", "author", "dc:description", "authkeywords")
+  keepListCol.content.newNames <- 
+    c("title", "publicationName",	"pubType", "isbn",	"issn",	"volume",	"issue", "pageRange",	"date", "doi", "firstAuthor", "citations", "allAuthors", "description", "author_keywords")
   keepListCol.author <- c("@seq", "authname", "entry_number")
   
   # rawQuery added here to add a new column to the spreadsheet for its terms
@@ -520,34 +485,35 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   searchStrings.names <- gsub("searchStrings.", "", searchStrings)
   
   # what variables in the reference list should be searched for
-  searchCols <- c("title", "abstract", "author_keywords") # removed , "document_type" Aug 1, 2019
-  # create blank queryResults in case there are 0 results of a search
+  searchCols <- c("title", "description", "author_keywords") # removed , "document_type" Aug 1, 2019
+  # create blank queryResults in case there are 0 results of a searchs
   queryResults <- data.table(NULL)
   # next few lines used to get totalresults
   query <- gsub("\\\\", "", query)
-  response = scopus_search(query = query, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
+  response = scopus_search(query = query, api_key = Scopus_api_key, insttoken = insttoken, max_count = 1, count = 1,  start = 1, verbose = FALSE, view = c( "COMPLETE"))
   nrResults <- response$total_results
-  if (nrResults > 5000) stop("Number of SCOPUS records greater than 5000")
+  if (nrResults > maxQueries) stop(paste0("Number of SCOPUS records greater than maximum queries allowed - ", maxQueries))
   if (nrResults == 0) {
     writeLines("No references for this query")
   }else{
     cat(green(query)) # display scopus query in green
-    response = scopus_search(query = query, max_count = nrResults, count = 25,  start = 0, verbose = FALSE, view = c("COMPLETE"))
+    print(paste0("\nScopus query: ", query))
+    response = scopus_search(query = query, api_key = Scopus_api_key, insttoken = insttoken, max_count = nrResults, count = 25,  start = 0, verbose = FALSE, view = c("COMPLETE"))
     df <- gen_entries_to_df(response$entries)
     dt.content <- as.data.table(df$df)
     dt.content[, setdiff(names(dt.content), keepListCol.content) := NULL]
     setnames(dt.content, old = keepListCol.content, new = keepListCol.content.newNames, skip_absent = TRUE)
-    dt.authorInfo <- as.data.table(df$author)
-    dt.authorInfo[, setdiff(names(dt.authorInfo), keepListCol.author) := NULL]
+    dt.authorInfo <- as.data.table(dt.content$firstAuthor)
+    #   dt.authorInfo[, setdiff(names(dt.authorInfo), keepListCol.author) := NULL]
     
-    authsList <- data.table(authrs = character())
-    for (i in unique(dt.authorInfo$entry_number)) {
-      temp <- dt.authorInfo[entry_number == i, authname]
-      temp <- as.list(paste(temp, collapse = ", "))
-      authsList <- rbind(authsList, temp)
-    }
+    # authsList <- data.table(authrs = character())
+    # for (i in unique(dt.authorInfo$entry_number)) {
+    #   temp <- dt.authorInfo[entry_number == i, authname]
+    #   temp <- as.list(paste(temp, collapse = ", "))
+    #   authsList <- rbind(authsList, temp)
+    # }
     queryResults <- unique(dt.content)
-    temp.author <- unique(dt.authorInfo)
+    temp.author <- unique(dt.authorInfo$V1) # a kludge because Scopus changed their output
     
     for (i in searchStrings.names) {
       queryResults[, (i) := "None"] # add None to the cell and then update below where there is actually an entry
@@ -570,9 +536,9 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     
     # remove non-peer reviewed reference types
     nonPeerReviewed.scopus <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Proceedings Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
-    queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
-    queryResults[, abstract.temp := abstract]
-    queryResults[, abstract.temp.global := abstract]
+    #   queryResults <- queryResults[!document_type %in% nonPeerReviewed.scopus,]
+    queryResults[, abstract.temp := description]
+    queryResults[, abstract.temp.global := description]
     write_rds(queryResults, "queryResultsBefore.RDS")
     require(stringr)
     
@@ -596,6 +562,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
       #      writeLines(paste0("searchString: ", i, ", ", searchStrings[i]))
       #     writeLines(searchStringsList[,.SD[i]]$searchString)
       #       writeLines(searchStringsList[,.SD[i]]$searchString)
+      #      print(paste0("i: ", i, ", searchString: ", head(searchStringsList[,.SD[i]]$searchString)))
       searchSt <- eval(parse(text = searchStringsList[,.SD[i]]$searchString)) # get list of search terms for the ith search list
       #     writeLines(paste0("searchSt: ", searchSt))
       searchSt <- replace_curly_quote(searchSt)
@@ -610,6 +577,7 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
         # #         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE))), .SDcols = searchCols]
         #          #         writeLines(paste("jnew ",  jnew))
         #        } else {
+        print(j)
         i1 <- queryResults[, Reduce("|", lapply(.SD, function(x) grepl(j, x, ignore.case = TRUE, perl = FALSE))), .SDcols = searchColsTemp]
         #       }
         
@@ -623,11 +591,8 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
       }
     }
     #   write_rds(queryResults, "queryResultsAfter.RDS")
-    globalStringToDelete <- c("global warming", "global climate", "global climate model","global population", "global famine", "global drought", 
-                              "global average", "global land", "global water", "global circulation", "global SOC", "global climate circulation models", "global circulation", 
-                              "global food", "global heating", "global south", "IGI global", "global eco-systems", "global terrestrial", "global cropland", "global land", "global validation", 
-                              "global challenges", "global incidence", "global cotton", "global meta-analysis", "global perspectives", "global socio-economic", 
-                              "global cereal", "global network", "global connectivity", "global dynamic", "global event", "genomic/global", "global transcriptomic", "global dependency", "global view")
+    globalStringToDelete <- c("global warming", "global climate", "global climate model","global population", "global famine", "global drought", "global average", "global land", "global water", "global circulation", "global SOC", "global climate circulation models", "global circulation", "global food", "global heating", "global south", "IGI global", "global eco-systems", "global terrestrial", "global cropland", "global land", "global validation", 
+                              "global challenges", "global incidence", "global cotton", "global meta-analysis", "global perspectives", "global socio-economic", "global cereal", "global network", "global connectivity", "global dynamic", "global event", "genomic/global", "global transcriptomic", "global dependency", "global view")
     globalStringToDelete <- paste( globalStringToDelete, collapse = "|")
     queryResults[, abstract.temp.global := trimws(gsub(globalStringToDelete, "\\1", abstract.temp.global, ignore.case = TRUE))]
     
@@ -657,7 +622,6 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
     queryResults[, author_keywords := str_replace_all(author_keywords, " \\|, ", " ")]
     queryResults[, author_keywords := str_replace_all(author_keywords, " \\|", ", ")]
   }
-   #browser()
   
   for (countryName in state.name) {
     queryResults[, countries := gsub(countryName, "United States", countries)]
@@ -667,56 +631,49 @@ readinSCOPUS <- function(query, rawQuery, searchStringsList) {
   
   # do IPCCregions
   
-   queryResult.countries <- queryResults[, c("countries")]
-   queryResult.countries[, row := seq_len(.N)] # adds a new column called row that has the row number in each cell
+  queryResult.countries <- queryResults[, c("countries")]
+  queryResult.countries[, row := seq_len(.N)] # adds a new column called row that has the row number in each cell
   # next line adds single region to the IPCCregions column and adds rows for references that have multiple region names
-#  queryResults.temp <- copy(queryResults)
-   queryResult.countries <- splitstackshape::cSplit(queryResult.countries, 'countries', ',', 
-                                 direction = 'long')[RegionLookupWG2, IPCCregions := WGII_Region, 
-                                                     on = c(countries = "countryName")]
+  #  queryResults.temp <- copy(queryResults)
+  queryResult.countries <- splitstackshape::cSplit(queryResult.countries, 'countries', ',', 
+                                                   direction = 'long')[RegionLookupWG2, IPCCregions := WGII_Region, 
+                                                                       on = c(countries = "countryName")]
   
-   queryResult.countries <- queryResult.countries[, lapply(.SD, toString), row][,row:=NULL]
-   queryResult.countries <- queryResult.countries[IPCCregions == "NA",  IPCCregions := "None"]
-   queryResults[, countries := NULL]
-   queryResults <- cbind(queryResults, queryResult.countries)
-   
+  queryResult.countries <- queryResult.countries[, lapply(.SD, toString), row][,row:=NULL]
+  queryResult.countries <- queryResult.countries[IPCCregions == "NA",  IPCCregions := "None"]
+  queryResults[, countries := NULL]
+  queryResults <- cbind(queryResults, queryResult.countries)
+  
   # do IPCCsubregions
   
-   queryResult.countries <- queryResults[, c("countries")]
-   queryResult.countries[, row := seq_len(.N)] # adds a new column called row that has the row number in each cell
-   # next line adds single region to the IPCCregions column and adds rows for references that have multiple region names
-   #  queryResults.temp <- copy(queryResults)
-   queryResult.countries <- splitstackshape::cSplit(queryResult.countries, 'countries', ',', 
-                                                    direction = 'long')[RegionLookupWG2, IPCCsubregions := WGII_Subregion, 
-                                                                        on = c(countries = "countryName")]
-   
-   queryResult.countries <- queryResult.countries[, lapply(.SD, toString), row][,row:=NULL]
-   queryResult.countries <- queryResult.countries[IPCCsubregions == "NA",  IPCCsubregions := "None"]
-   queryResults[, countries := NULL]
-   queryResults <- cbind(queryResults, queryResult.countries)
+  queryResult.countries <- queryResults[, c("countries")]
+  queryResult.countries[, row := seq_len(.N)] # adds a new column called row that has the row number in each cell
+  # next line adds single region to the IPCCregions column and adds rows for references that have multiple region names
+  #  queryResults.temp <- copy(queryResults)
+  queryResult.countries <- splitstackshape::cSplit(queryResult.countries, 'countries', ',', 
+                                                   direction = 'long')[RegionLookupWG2, IPCCsubregions := WGII_Subregion, 
+                                                                       on = c(countries = "countryName")]
+  
+  queryResult.countries <- queryResult.countries[, lapply(.SD, toString), row][,row:=NULL]
+  queryResult.countries <- queryResult.countries[IPCCsubregions == "NA",  IPCCsubregions := "None"]
+  queryResults[, countries := NULL]
+  queryResults <- cbind(queryResults, queryResult.countries)
   
   # set scopus column name order here to make sure all queries have the same column order
   # column names that should be in all scopus refs
-  scopusColNames <- c("title", "firstAuthor", "publicationName", "eIssn", "volume", "issue",         
-                      "date", "doi", "abstract", "citations", "pubType", "document_type", "pageRange",      
-                      "author_keywords")
+  scopusColNames <- c("title", "firstAuthor", "publicationName", "eIssn", "volume", "issue", "date", "doi", "description", "citations", "pubType",  "pageRange", "author_keywords")
   filterColumns <- names(queryResults)[!names(queryResults) %in% c("keepRef", "comments", scopusColNames)]
   #  setcolorder(queryResults, c("keepRef", scopusColNames, filterColumns, "comments"))
-  queryColOrder <- c("keepRef", "title", "firstAuthor", "publicationName", "volume", "date", "doi", "abstract", "citations", "pubType", 
-                     "document_type", "author_keywords", "eIssn", "issue", "pageRange", "countries", "regions", "IPCCregions", "IPCCsubregions", "baseQuery", "RCP", "SSP", "CCsource", "CCimpact", 
+  queryColOrder <- c("keepRef", "title", "firstAuthor", "publicationName", "volume", "date", "doi", "description", "citations", "pubType",  "author_keywords", "eIssn", "issue", "pageRange", "countries", "regions", "IPCCregions", "IPCCsubregions", "baseQuery", "RCP", "SSP", "CCsource", "CCimpact", 
                      "CCadapt", "CCobserved", "CCvulnerability", "animals", "cereals", "fruits", "vegetables", "rootsNtubers", "stimulants", "fish", "foodSec", "foodSafety", 
                      "notPeerRev", "timePeriod", "econ", "gender", "indigenous", "ethnicity", "adaptStrat", "climZones", "crpSystems", "nutrients", "fibre", "pestsPlants", 
-                     "pestsAnimals", "cropModels", "engLevel", "adapType", "adapProfile", "adapStage", "adapBeneficiary", "adapLimits", "adapConstraints", "extentCC", 
-                     "biotech", "breadbaskets", "comments")
+                     "pestsAnimals", "cropModels", "engLevel", "adapType", "adapProfile", "adapStage", "adapBeneficiary", "adapLimits", "adapConstraints", "extentCC", "biotech", "breadbaskets", "comments")
   if (!"issue" %in% names(queryResults)) queryResults[, issue := "None"]
   if (!"date" %in% names(queryResults)) queryResults[, date := "None"]
   if (!"eIssn" %in% names(queryResults)) queryResults[, eIssn := "None"]
   
   setcolorder(queryResults, neworder = queryColOrder)
-  
   write_rds(queryResults, "queryResultsAfter.RDS")
-  
-  
   writeLines('Done with SCOPUS\n')
   return(queryResults)
 }
@@ -780,7 +737,7 @@ cleanup <- function(inDT, outName, destDir, writeFiles, desc, numVal, wrapCols) 
   # outInfo <- list(outName, srcFile, destDir, desc, colNames)
   # metadataDT <<- rbind(metadataDT, outInfo)
   #  cat("\n", "Outfilename: ", outName, " Destination: ", Destination," Script: ", srcFile," Desc: ", desc," Col. names: ", colNames, "\n")
-  #convert to a standard order
+  #convert to a COMPLETE order
   oldOrder <- names(inDT)
   startOrder <- c("scenario","year")
   if (all(startOrder %in% oldOrder)) {
@@ -865,29 +822,31 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   writeLines(paste0("Working on query ", queryNum, " filename: ", outFileName))
   query.wok <- constructQuery.WOK(rawQuery, yearCoverage.wok, CCSearchString, climateMitigation) 
   query.wok <- gsub("AND NOT", "NOT", query.wok)
+  writeLines(query.wok)
+ # browser()
   QueryID.wok <- queries[queryNumber %in% queryNum, QueryID.wok] # for WOK
   nrResults.wok <- queries[queryNumber %in% queryNum, nrResults.wok] # for WOK
   queryResults.wok <- readinWOKWithQueryID(query = query.wok, QueryID = QueryID.wok, nrResults = nrResults.wok)
   writeLines(paste0("queryResults.wok count: ", nrow(queryResults.wok)))
   
   nrResults.scopus <- queries[queryNumber %in% queryNum, nrResults.scopus] # for SCOPUS
-  if (nrResults.scopus > 5000) {
-    writeLines(paste0("Number of results for scopus greater than 5000 for query ", queryNum, ". Skipping it."))
+  if (nrResults.scopus > maxQueries) {
+    writeLines(paste0("Number of results for scopus greater than ", maxQueries, " for query ", queryNum, ". Skipping it."))
   } 
   if (nrResults.scopus == 0) {
     writeLines(paste0("No results for scopus for query ", queryNum, ". Skipping it."))
     queryResults.scopus <- data.table(NULL)
   }
   
-  if ((!nrResults.scopus > 5000) & (!nrResults.scopus == 0)) {
+  if ((!nrResults.scopus > maxQueries) & (!nrResults.scopus == 0)) {
     query.scopus <- constructQuery.scopus(rawQuery, yearCoverage.scopus, CCSearchString, climateMitigation)
-    replace_curly_quote(query.scopus)
-    
-    query.scopus <- gsub("\\\\", "", query.scopus)
+    #  browser()
     queryResults.scopus <- readinSCOPUS(query = query.scopus, rawQuery, searchStringsList)
     temp <- rejectList_master[queryName %in% outFileName,]
     queryResults.scopus <- queryResults.scopus[!title %in% temp$rejectTitle,]
   }
+  
+#  browser()
   # process if both results have content
   doi.wok <- sort(queryResults.wok$doi)
   # writeLines(doi.wok)
@@ -913,7 +872,7 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
     queryResults.wok.unique <- queryResults.wok.unique[!eIssn %in% eissn.common,]
     temp <- rejectList_master[queryName %in% outFileName,]
     queryResults.wok.unique <- queryResults.wok.unique[!title %in% temp$rejectTitle,]
-    dois.combined <- unique(c(doi.unique.wok, doi.unique.wok))
+    dois.combined <- unique(c(doi.unique.scopus, doi.unique.wok))
     dois.combined <<- dois.combined[!is.null(dois.combined)]
     writeLines(paste("csv out: ", paste0("results/dois/combinedDOIs_/", outFileName, "_", Sys.Date(),".csv")))
     
@@ -935,7 +894,7 @@ prepareOutput <- function(queryNum, queries, rejectList_master, climateMitigatio
   if ((nrow(queryResults.scopus) == 0) & (!nrow(queryResults.wok) == 0)) {
     queryResults.wok.unique <-   queryResults.wok
     nonPeerReviewed.wok <- c("Conference Proceeding", "Letter", " Correction", "Editorial", "Editorial Material", "Note", "Trade Journal", "Conference Paper", "Conference Review", "Erratum", "Short Survey", "Business Article", NA)
-    queryResults.wok.unique[!document_type %in% nonPeerReviewed.wok, ]
+    queryResults.wok.unique[!subtype %in% nonPeerReviewed.wok, ]
     prepareSpreadsheet(sectionName = queries[queryNumber == queryNum, sectionName], queryResults.scopus, query.scopus, queryResults.wok = queryResults.wok.unique, query.wok, outFileName, searchStringsList)
   }
   # these if statements should always be FALSE
@@ -1088,7 +1047,7 @@ clusterSetup <- function(varList, libList, useCores) {
 setGeneric(
   "doi2bib",
   function(..., file, append = TRUE, quiet = FALSE) {
-    standardGeneric("doi2bib")
+    COMPLETEGeneric("doi2bib")
   },
   signature = signature("...")
 )
