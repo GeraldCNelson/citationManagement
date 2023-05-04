@@ -53,11 +53,6 @@ queries.small <- queryInfo[nrResults.scopus < maxQueries,]
 #queriestoProcessList <- paste0("1:", nrow(queries.small))
 queryNum <- 1
 
-#for (i in c(20, 22, 39, 44)) {
-#for (i in as.numeric(missingQueries)) {
-#  for (i in 82:nrow(queries.small)) {
-#for (i in 86:nrow(queries.small)) {
-
 for (i in 1:nrow(queries.small)) {
   queryNum <- eval(parse(text = queries.small[,.SD[i]]$queryNumber))     
   prepareOutput(queryNum = queryNum, queries = queries.small, rejectList_master, climateMitigation)
@@ -68,10 +63,13 @@ outFile.bib <- paste0("test", "_", Sys.Date(),".bib")
 h <- new_handle()
 handle_setheaders(h, "accept" = "application/x-bibtex")
 
-for (i in 1:length(dois.combined)) {
+for (i in 169:length(dois.combined)) {
   url <- paste0("https://doi.org/", dois.combined[i])
   if (!grepl("NULL", url, fixed = TRUE)) {
     #     try(curl_download(url, destfile = outFile.bib, handle = h, mode = "a"), outFile = "results/tryError.txt")
     curl_download(url, destfile = outFile.bib, handle = h, mode = "a")
   }
 }
+
+# bad dois, maybe
+164, 168
