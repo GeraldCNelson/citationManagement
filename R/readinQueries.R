@@ -19,20 +19,6 @@ chapter <- "wg2_ch05"
 yearCoverage.scopus <- "PUBYEAR > 2020"
 yearCoverage.wok <- "= 2021-2023"
 queries <- as.data.table(read_excel(paste0("data-raw/queries_wg2_ch05.xlsx"), sheet = "baseQueries"))
-#queries.org <- queries
-#set Scopus institution token in .Renviron
-#run this in R - usethis::edit_r_environ()
-# then type insttoken="xxxxxxxxxxxxxx") into the newly opened window
-# get Scopus api key
-#get_api_key(api_key = Sys.getenv('Elsevier_API'))
-Scopus_api_key <- Sys.getenv('Elsevier_API')
-#if (!have_api_key()) stop("Missing api key")
-
-# get SCOPUS institutional key
-insttoken <- Sys.getenv("insttoken")
-if (!exists("insttoken")) stop("insttoken missing")
-# get WOS api key
-wosliteKey <- Sys.getenv("wosliteKey")
 
 if (!nrow(queries) == max(queries$queryNumber)) {
   stop("Query numbers probably need to be updated.")
@@ -63,13 +49,13 @@ outFile.bib <- paste0("test", "_", Sys.Date(),".bib")
 h <- new_handle()
 handle_setheaders(h, "accept" = "application/x-bibtex")
 
-for (i in 169:length(dois.combined)) {
+for (i in 161:length(dois.combined)) {
+  print(i)
   url <- paste0("https://doi.org/", dois.combined[i])
   if (!grepl("NULL", url, fixed = TRUE)) {
-    #     try(curl_download(url, destfile = outFile.bib, handle = h, mode = "a"), outFile = "results/tryError.txt")
-    curl_download(url, destfile = outFile.bib, handle = h, mode = "a")
+    try(curl_download(url, destfile = outFile.bib, handle = h, mode = "a"), outFile = "results/tryError.txt") # use this to keep going even if there is an error
+    #curl_download(url, destfile = outFile.bib, handle = h, mode = "a")
   }
 }
 
-# bad dois, maybe
-164, 168
+
