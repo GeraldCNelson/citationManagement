@@ -45,17 +45,39 @@ for (i in 1:nrow(queries.small)) {
 }
 
 # get the urls for each of the dois -----
-outFile.bib <- paste0("test", "_", Sys.Date(),".bib")
+outFile.bib <- paste0("results/bibout", "_", queryInfo$fileName, "_", Sys.Date(), ".bib")
 h <- new_handle()
 handle_setheaders(h, "accept" = "application/x-bibtex")
 
-for (i in 161:length(dois.combined)) {
-  print(i)
-  url <- paste0("https://doi.org/", dois.combined[i])
-  if (!grepl("NULL", url, fixed = TRUE)) {
-    try(curl_download(url, destfile = outFile.bib, handle = h, mode = "a"), outFile = "results/tryError.txt") # use this to keep going even if there is an error
-    #curl_download(url, destfile = outFile.bib, handle = h, mode = "a")
-  }
-}
+# for (i in 161:length(dois.combined)) {
+#      print(i)
+#   url <- paste0("https://doi.org/", dois.combined[i])
+#   if (!grepl("NULL", url, fixed = TRUE)) {
+#     try(curl_download(url, destfile = outFile.bib, handle = h, mode = "a"), outFile = "results/tryError.txt") # use this to keep going even if there is an error
+#     #curl_download(url, destfile = outFile.bib, handle = h, mode = "a")
+#   }
+# }
 
+## create a vector of urls
+#urls <- (character())
+# for (i in 161:176) {
+#   url <- paste0("https://doi.org/", dois.combined[i])
+#   urls <- c(url, urls)
+# }
+# error_filename = paste0("results/doiError", "_", queryInfo$fileName, "_", Sys.Date(), ".txt")
+# outFile.bib <- paste0("results/bibout", "_", queryInfo$fileName, "_", Sys.Date(), ".bib")
+# #for (i in 161:length(dois.combined)) {
+# for (i in 161:176) {
+#   print(paste0("working on doi ", dois.combined[i]))
+# url <- paste0("https://doi.org/", dois.combined[i])
+# tryCatch({
+#   curl_download(url, destfile = outFile.bib, handle = h, mode = "a")
+# }, error = function(e) {
+#   # if there's an error, save the result and increment the counter
+#   error_message <- paste0("Error at URL ", url, ": ", conditionMessage(e), "\n")
+#   print(error_message)
+#   write_file(error_message, error_filename, append = TRUE)
+# })
+# }
 
+doiToBibtex(doiList = dois.combined, filename = outFile.bib)

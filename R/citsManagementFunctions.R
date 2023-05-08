@@ -857,22 +857,12 @@ doiToBibtex <- function(doiList, filename) {
   #store all the bibtex entries to a file
   require(curl)
   file.create(filename)
-  for (j in 1:length(doiList$dois.combined)) {
-    tempDOI <- doiList$dois.combined[j]
+  for (j in 1:length(doiList)) {
+    print(paste0("working on DOI ", doiList[j], ", citation ", j, " of ",length(doiList) ))
+    tempDOI <- doiList[j]
     bibtemp <- createBibtexEntry(tempDOI)
     write(bibtemp, file = filename, append = TRUE)
   }
-}
-
-clusterSetup <- function(varList, libList, useCores) {
-  cl <- makeCluster(useCores,  outfile = "")
-  registerDoParallel(cl)
-  if (!missing(libList)) {
-    varList <- c(varList, "libList")
-  }
-  clusterExport(cl, varlist = c(varList))
-  clusterEvalQ(cl, sapply(libList, require, character.only = TRUE))
-  return(cl)
 }
 
 # source of the DOI to Bibtex code is https://rdrr.io/github/wkmor1/doi2bib/src/R/doi2bib.r
