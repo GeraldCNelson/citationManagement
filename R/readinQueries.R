@@ -24,6 +24,7 @@ if (!nrow(queries) == max(queries$queryNumber)) {
   stop("Query numbers probably need to be updated.")
 }
 
+
 #get info for all the queries in queries from wok database
 queryInfo <- getDBinfo(queries, yearCoverage.wok, yearCoverage.scopus,CCSearchString = CCSearchString)
 
